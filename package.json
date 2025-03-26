@@ -1,0 +1,27 @@
+{
+    "name": "pxls-userscripts",
+    "version": "1.0.0",
+    "description": "",
+    "main": "dist/index.js",
+    "type": "module",
+    "scripts": {
+        "lint": "eslint ./src",
+        "format": "prettier --write .",
+        "check-format": "prettier --check .",
+        "typecheck": "tsc --noEmit",
+        "build": "esbuild"
+    },
+    "devDependencies": {
+        "@eslint-community/eslint-plugin-eslint-comments": "^4.4.1",
+        "@eslint/js": "^9.23.0",
+        "esbuild": "^0.25.1",
+        "eslint": "^9.23.0",
+        "eslint-config-prettier": "^10.1.1",
+        "globals": "^16.0.0",
+        "prettier": "^3.5.3",
+        "prettier-plugin-organize-imports": "^4.1.0",
+        "typescript": "^5.8.2",
+        "typescript-eslint": "^8.28.0"
+    },
+    "private": true
+}
