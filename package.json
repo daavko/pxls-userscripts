@@ -2,7 +2,6 @@
     "name": "pxls-userscripts",
     "version": "1.0.0",
     "description": "",
-    "main": "dist/index.js",
     "type": "module",
     "scripts": {
         "lint": "eslint ./src",
