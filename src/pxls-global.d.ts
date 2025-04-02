@@ -251,27 +251,35 @@ declare interface PxlsApp {
         addIgnore(name: string): void;
         removeIgnore(name: string): void;
         getIgnores(): string[];
-        // todo
-        typeahead: {};
+        // eslint-disable-next-line @typescript-eslint/member-ordering -- foreign code
+        typeahead: {
+            helper: unknown;
+            suggesting: boolean;
+            hasResults: boolean;
+            highlightedIndex: number;
+            lastLength: boolean;
+            readonly shouldInsert: boolean;
+        };
         updateSelectedNameColor(colorIndex: number): void;
         updateCanvasBanState(banned: boolean): void;
-        // todo
-        registerHook: {};
-        // todo
-        replaceHook: {};
-        // todo
-        unregisterHook: {};
-        // todo
-        runLookup: {};
-        // todo
-        readonly markdownProcessor: {};
-        // todo
-        readonly canvasBanRespected: {};
+        registerHook(...hooks: PxlsAppChatHook[]): void;
+        replaceHook(hookId: string, newHook: Omit<PxlsAppChatHook, 'id'>): void;
+        unregisterHook(hookId: string): void;
+        // eslint-disable-next-line @typescript-eslint/member-ordering -- foreign code
+        readonly markdownProcessor: (...args: unknown[]) => void;
+        // eslint-disable-next-line @typescript-eslint/member-ordering -- foreign code
+        readonly canvasBanRespected: boolean;
     };
 
-    // todo
     // eslint-disable-next-line @typescript-eslint/member-ordering -- foreign code
-    typeahead: {};
+    typeahead: {
+        helper: unknown;
+        suggesting: boolean;
+        hasResults: boolean;
+        highlightedIndex: number;
+        lastLength: boolean;
+        readonly shouldInsert: boolean;
+    };
 
     // eslint-disable-next-line @typescript-eslint/member-ordering -- foreign code
     user: {
@@ -286,9 +294,19 @@ declare interface PxlsApp {
         hasPermission(permission: string): boolean;
     };
 
-    // todo
     // eslint-disable-next-line @typescript-eslint/member-ordering -- foreign code
-    modal: {};
+    modal: {
+        showText(text: string, opts: JQueryModalOptions): unknown;
+        show(modal: HTMLElement, opts: JQueryModalOptions): unknown;
+        buildCloser(): HTMLElement;
+        buildDom(
+            headerContent: string | HTMLElement,
+            bodyContent: string | HTMLElement,
+            footerContent: string | HTMLElement,
+        ): HTMLElement;
+        closeAll(clearDom?: boolean): void;
+        closeTop(clearDom?: boolean): void;
+    };
 }
 
 declare interface PxlsAppStorage {
@@ -377,6 +395,42 @@ declare interface PxlsAppLookupHookData {
     pixelCount?: number;
     pixelCountAlltime?: number;
     discordName?: string;
+}
+
+declare interface PxlsAppChatHook {
+    id: string;
+    get(data: PxlsAppChatHookData): { pings: string[] };
+}
+
+declare interface PxlsAppChatHookData {
+    id: number;
+    author: string;
+    date: number;
+    message_raw: string;
+    replyingToId: number;
+    replyShouldMention: boolean;
+    badges: {
+        displayName: string;
+        tooltip: string;
+        type: string;
+        cssIcon: string;
+    }[];
+    authorNameColor: number;
+}
+
+declare interface JQueryModalOptions {
+    blockerClass: string;
+    clickClose: boolean;
+    closeClass: string;
+    closeExisting: boolean;
+    closeText: string;
+    escapeClose: boolean;
+    fadeDelay: number;
+    fadeDuration: number;
+    modalClass: string;
+    showClose: boolean;
+    showSpinner: boolean;
+    spinnerHtml: string;
 }
 
 declare global {
