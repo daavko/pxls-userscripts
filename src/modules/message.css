@@ -24,6 +24,10 @@
     border-radius: 5px;
 }
 
+.dpus__message--info {
+    background-color: mediumblue;
+}
+
 .dpus__message--success {
     background-color: darkgreen;
 }

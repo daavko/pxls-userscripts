@@ -1,5 +1,5 @@
 import { createDocumentFragment, createRandomElementId } from './document';
-import { getGlobalSettings, type Settings, type SettingsRecord } from './settings';
+import { type BooleanOptionKeys, getGlobalSettings, Settings, type StringOptionKeys } from './settings';
 
 export function createSettingsUI(headerTitle: string, bodyCreationFn: () => DocumentFragment[]): void {
     const optionsSidebar = document.querySelector('aside#settings > .panel-body');
@@ -39,12 +39,11 @@ export function createSettingsUI(headerTitle: string, bodyCreationFn: () => Docu
     optionsSidebar.appendChild(optionsHtml);
 }
 
-export function createBooleanSetting<OptionObject extends SettingsRecord>(
-    settings: Settings<OptionObject>,
-    optionKey: string,
+export function createBooleanSetting<T extends Record<string, unknown>>(
+    settings: Settings<T>,
+    optionKey: BooleanOptionKeys<T>,
     label: string,
 ): DocumentFragment {
-    settings._assertBoolean(optionKey);
     const id = createRandomElementId();
     const optionHtml = createDocumentFragment(`
         <div>
@@ -68,12 +67,27 @@ export function createBooleanSetting<OptionObject extends SettingsRecord>(
 //     range?: [number, number],
 // ): DocumentFragment {}
 //
-// function createStringOption<SettingsObject extends SettingsRecord>(
-//     settings: Settings<SettingsObject>,
-//     optionKey: keyof SettingsObject,
-//     label: string,
-//     values?: string[],
-// ): DocumentFragment {}
+
+export function createStringSetting<T extends Record<string, unknown>>(
+    settings: Settings<T>,
+    optionKey: StringOptionKeys<T>,
+    label: string,
+): DocumentFragment {
+    const id = createRandomElementId();
+    const optionHtml = createDocumentFragment(`
+        <div>
+            <label for="${id}" class="input-group">
+                <span class="label-text">${label}</span>
+                <input type="text" id="${id}" class="fullwidth" value="${settings._getString(optionKey)}" />
+            </label>
+        </div>
+    `);
+    const input: HTMLInputElement = optionHtml.querySelector(`input#${id}`)!;
+    input.addEventListener('change', () => {
+        settings._setString(optionKey, input.value);
+    });
+    return optionHtml;
+}
 //
 // function createSelectOption<SettingsObject extends SettingsRecord>(
 //     settings: Settings<SettingsObject>,

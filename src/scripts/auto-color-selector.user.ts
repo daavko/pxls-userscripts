@@ -1,5 +1,6 @@
 import { mdiEyedropper } from '@mdi/js';
-import { z } from 'zod';
+import type { InferOutput } from 'valibot';
+import * as v from 'valibot';
 import { debug, setDebugName } from '../modules/debug';
 import { createInfoIcon, type InfoIcon, type InfoIconOptions, type InfoIconState } from '../modules/info-icon';
 import { setMessagePrefix, showErrorMessage } from '../modules/message';
@@ -7,7 +8,13 @@ import { getApp, globalInit, waitForApp } from '../modules/pxls-init';
 import { anyColorSelected, getFastLookupPalette, selectColor, unselectColor } from '../modules/pxls-palette';
 import { getCurrentTemplate, TEMPLATE_CHANGE_EVENT_NAME, type TemplateData } from '../modules/pxls-template';
 import { getPxlsUIBoard, getPxlsUIMouseCoords } from '../modules/pxls-ui';
-import { createScriptSettings, getGlobalSettings, initGlobalSettings } from '../modules/settings';
+import {
+    booleanSerializer,
+    createScriptSettings,
+    getGlobalSettings,
+    initGlobalSettings,
+    type ValueSerializerMap,
+} from '../modules/settings';
 import {
     createBooleanSetting,
     createKeyboardShortcutText,
@@ -18,23 +25,34 @@ import {
     createSubheading,
 } from '../modules/settings-ui';
 import { detemplatizeImageWorker, getTemplateImage } from '../modules/template';
+import type { NonNullableKeys } from '../util/types';
 
 globalInit();
 setDebugName('Template color autoselector');
 setMessagePrefix('Template color autoselector');
 initGlobalSettings('dpus_templateColorAutoselector_globalSettings');
 
-const settingsSchema = z
-    .object({
-        deselectColorOutsideTemplate: z.boolean(),
-        selectColorWhenDeselectedInsideTemplate: z.boolean(),
-    })
-    .partial();
-const settingsDefault: Required<z.infer<typeof settingsSchema>> = {
+const settingsSchema = v.partial(
+    v.object({
+        deselectColorOutsideTemplate: v.boolean(),
+        selectColorWhenDeselectedInsideTemplate: v.boolean(),
+    }),
+);
+type SettingsType = NonNullableKeys<InferOutput<typeof settingsSchema>>;
+const settingsDefault: SettingsType = {
     deselectColorOutsideTemplate: false,
     selectColorWhenDeselectedInsideTemplate: false,
 };
-const settings = createScriptSettings('dpus_templateColorAutoselector_settings', settingsSchema, settingsDefault);
+const settingsValueSerializerMap: ValueSerializerMap<SettingsType> = {
+    deselectColorOutsideTemplate: booleanSerializer,
+    selectColorWhenDeselectedInsideTemplate: booleanSerializer,
+};
+const settings = createScriptSettings(
+    'dpus_templateColorAutoselector_settings',
+    settingsSchema,
+    settingsDefault,
+    settingsValueSerializerMap,
+);
 
 // string[] with hex color values
 let palette: number[] = [];

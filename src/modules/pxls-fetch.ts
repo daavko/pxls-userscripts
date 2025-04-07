@@ -1,4 +1,4 @@
-import { ZodError } from 'zod';
+import * as v from 'valibot';
 import { type PxlsInfoResponse, pxlsInfoResponseSchema } from '../pxls/pxls-types';
 import { showErrorMessage } from './message';
 import { getDpus } from './pxls-init';
@@ -42,9 +42,7 @@ export async function getPxlsInfo(): Promise<PxlsInfoResponse | null> {
     dpusPxlsFetch.info = {
         state: 'pending',
         promise: fetchInfo().catch((error: unknown) => {
-            if (error instanceof ZodError) {
-                showErrorMessage(`Failed to parse /info response`, error);
-            } else if (error instanceof Error) {
+            if (error instanceof Error) {
                 showErrorMessage(`Failed to fetch /info`, error);
             }
             return null;
@@ -61,11 +59,11 @@ async function fetchInfo(): Promise<PxlsInfoResponse> {
     }
 
     const infoData: unknown = await infoResponse.json();
-    const infoDataParseResult = pxlsInfoResponseSchema.safeParse(infoData);
+    const infoDataParseResult = v.safeParse(pxlsInfoResponseSchema, infoData);
 
     if (!infoDataParseResult.success) {
-        throw new Error('Failed to parse /info response', { cause: infoDataParseResult.error });
+        throw new Error('Failed to parse /info response', { cause: infoDataParseResult.issues });
     }
 
-    return infoDataParseResult.data;
+    return infoDataParseResult.output;
 }
