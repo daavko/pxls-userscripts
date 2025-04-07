@@ -11,5 +11,7 @@
 // @source       https://github.com/daavko/pxls-userscripts
 // @match        https://pxls.space/
 // @run-at       document-idle
+// @updateURL    https://pxls.daavko.moe/userscripts/auto-color-selector.user.js
+// @downloadURL  https://pxls.daavko.moe/userscripts/auto-color-selector.user.js
 // @supportURL   https://github.com/daavko/pxls-userscripts/issues
 // ==/UserScript==
