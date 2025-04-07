@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as v from 'valibot';
 import type { NullableKeys } from '../util/types';
 import { debug } from './debug';
 import { getApp, getDpus } from './pxls-init';
@@ -164,9 +164,9 @@ export function initTemplateEventHandlers(): void {
             }
         });
 
-        const pxlsQueryUpdatedSchema = z.object({
-            parameter: z.string(),
-            value: z.string().nullable(),
+        const pxlsQueryUpdatedSchema = v.object({
+            parameter: v.string(),
+            value: v.nullable(v.string()),
         });
         $(window).on('pxls:queryUpdated', (_e, parameterName: unknown, oldValue: unknown, newValue: unknown) => {
             if (oldValue === newValue) {
@@ -174,7 +174,7 @@ export function initTemplateEventHandlers(): void {
             }
 
             debug('pxls:queryUpdated', parameterName, oldValue, newValue);
-            const { parameter, value } = pxlsQueryUpdatedSchema.parse({
+            const { parameter, value } = v.parse(pxlsQueryUpdatedSchema, {
                 parameter: parameterName,
                 value: newValue,
             });

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as v from 'valibot';
 import type { PxlsApp } from '../pxls/pxls-global';
 import { waitForAnimationFrame } from '../util/browser';
 import { debug } from './debug';
@@ -72,16 +72,17 @@ export function getDpus(): Partial<DPUS> {
 async function waitForLogin(): Promise<void> {
     return new Promise((resolve) => {
         $(window).on('pxls:user:loginState', (_event, loggedIn: unknown) => {
-            const loggedInParseResult = z.boolean().safeParse(loggedIn);
+            const loggedInParseResult = v.safeParse(v.boolean(), loggedIn);
             if (loggedInParseResult.success) {
-                if (loggedInParseResult.data) {
+                if (loggedInParseResult.output) {
                     debug('User logged in, resolving');
                     resolve();
                 } else {
                     debug('User not logged in, waiting for login state');
                 }
             } else {
-                showErrorMessage('Login state received is not a boolean', loggedInParseResult.error);
+                const errorMessage = 'Login state received is not a boolean';
+                showErrorMessage(errorMessage, new Error(errorMessage, { cause: loggedInParseResult.issues }));
             }
         });
     });

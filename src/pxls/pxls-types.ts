@@ -1,66 +1,68 @@
-import { z } from 'zod';
+import type { InferOutput } from 'valibot';
+import * as v from 'valibot';
 
-const pxlsInfoAuthServiceSchema = z.object({
-    id: z.string(),
-    name: z.string(),
-    registrationEnabled: z.boolean(),
+const pxlsInfoAuthServiceSchema = v.object({
+    id: v.string(),
+    name: v.string(),
+    registrationEnabled: v.boolean(),
 });
 
-const pxlsInfoCustomEmojiSchema = z.object({
-    emoji: z.string(),
-    name: z.string(),
+const pxlsInfoCustomEmojiSchema = v.object({
+    emoji: v.string(),
+    name: v.string(),
 });
 
-const pxlsInfoPaletteItemSchema = z.object({
-    name: z.string(),
-    value: z
-        .string()
-        .regex(/^[0-9a-f]{6}$/i)
-        .transform((val) => `#${val.toLowerCase()}`),
+const pxlsInfoPaletteItemSchema = v.object({
+    name: v.string(),
+    value: v.pipe(
+        v.string(),
+        v.regex(/^[0-9a-f]{6}$/i),
+        v.transform((val) => `#${val.toLowerCase()}`),
+    ),
 });
 
-const pxlsInfoCooldownInfoSchema = z.object({
-    type: z.string(),
-    staticCooldownSeconds: z.number(),
-    activityCooldown: z.object({
-        steepness: z.number(),
-        multiplier: z.number(),
-        globalOffset: z.number(),
-        userOffset: z.number(),
+const pxlsInfoCooldownInfoSchema = v.object({
+    type: v.string(),
+    staticCooldownSeconds: v.number(),
+    activityCooldown: v.object({
+        steepness: v.number(),
+        multiplier: v.number(),
+        globalOffset: v.number(),
+        userOffset: v.number(),
     }),
 });
 
-export const pxlsInfoResponseSchema = z.object({
-    canvasCode: z.string(),
-    width: z.number(),
-    height: z.number(),
-    palette: z.array(pxlsInfoPaletteItemSchema),
+export const pxlsInfoResponseSchema = v.object({
+    canvasCode: v.string(),
+    width: v.number(),
+    height: v.number(),
+    palette: v.array(pxlsInfoPaletteItemSchema),
     cooldownInfo: pxlsInfoCooldownInfoSchema,
-    heatmapCooldown: z.number(),
-    maxStacked: z.number(),
-    authServices: z.record(pxlsInfoAuthServiceSchema),
-    registrationEnabled: z.boolean(),
-    chatEnabled: z.boolean(),
-    chatRespectsCanvasBan: z.boolean(),
-    chatCharacterLimit: z.number(),
-    chatBannerText: z.array(z.string()),
-    snipMode: z.boolean(),
-    emoteSet7TV: z.string(),
-    customEmoji: z.array(pxlsInfoCustomEmojiSchema),
-    corsBase: z.string(),
-    corsParam: z.string(),
-    legal: z.object({
-        termsUrl: z.string(),
-        privacyUrl: z.string(),
+    heatmapCooldown: v.number(),
+    maxStacked: v.number(),
+    authServices: v.record(v.string(), pxlsInfoAuthServiceSchema),
+    registrationEnabled: v.boolean(),
+    chatEnabled: v.boolean(),
+    chatRespectsCanvasBan: v.boolean(),
+    chatCharacterLimit: v.number(),
+    chatBannerText: v.array(v.string()),
+    snipMode: v.boolean(),
+    emoteSet7TV: v.string(),
+    customEmoji: v.array(pxlsInfoCustomEmojiSchema),
+    corsBase: v.string(),
+    corsParam: v.string(),
+    legal: v.object({
+        termsUrl: v.string(),
+        privacyUrl: v.string(),
     }),
-    chatRatelimitMessage: z.string(),
-    chatLinkMinimumPixelCount: z.number(),
-    chatLinkSendToStaff: z.boolean(),
-    chatDefaultExternalLinkPopup: z.boolean(),
+    chatRatelimitMessage: v.string(),
+    chatLinkMinimumPixelCount: v.number(),
+    chatLinkSendToStaff: v.boolean(),
+    chatDefaultExternalLinkPopup: v.boolean(),
 });
 
-export type PxlsInfoResponse = z.infer<typeof pxlsInfoResponseSchema>;
-export type PxlsInfoAuthService = z.infer<typeof pxlsInfoAuthServiceSchema>;
-export type PxlsInfoCustomEmoji = z.infer<typeof pxlsInfoCustomEmojiSchema>;
-export type PxlsInfoPaletteItem = z.infer<typeof pxlsInfoPaletteItemSchema>;
-export type PxlsInfoCooldownInfo = z.infer<typeof pxlsInfoCooldownInfoSchema>;
+export type PxlsInfoResponse = InferOutput<typeof pxlsInfoResponseSchema>;
+export type PxlsInfoAuthService = InferOutput<typeof pxlsInfoAuthServiceSchema>;
+export type PxlsInfoCustomEmoji = InferOutput<typeof pxlsInfoCustomEmojiSchema>;
+export type PxlsInfoPaletteItem = InferOutput<typeof pxlsInfoPaletteItemSchema>;
+export type PxlsInfoCooldownInfo = InferOutput<typeof pxlsInfoCooldownInfoSchema>;

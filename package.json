@@ -8,7 +8,8 @@
         "format": "prettier --write .",
         "check-format": "prettier --check .",
         "typecheck": "tsc --noEmit",
-        "build-color-selector": "node build.js src/scripts/auto-color-selector.user.ts"
+        "build-color-selector": "node build.js src/scripts/auto-color-selector.user.ts",
+        "build-milestone-watcher": "node build.js src/scripts/milestone-watcher.user.ts"
     },
     "devDependencies": {
         "@eslint-community/eslint-plugin-eslint-comments": "^4.4.1",
@@ -27,6 +28,6 @@
     "sideEffects": false,
     "dependencies": {
         "@mdi/js": "^7.4.47",
-        "zod": "^3.24.2"
+        "valibot": "^1.0.0"
     }
 }
