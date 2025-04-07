@@ -3,3 +3,7 @@ export function createDocumentFragment(html: string): DocumentFragment {
     template.innerHTML = html;
     return template.content;
 }
+
+export function createRandomElementId(): string {
+    return `dpus-${crypto.randomUUID()}`;
+}
