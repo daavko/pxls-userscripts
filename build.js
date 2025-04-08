@@ -1,5 +1,5 @@
 import * as esbuild from 'esbuild';
-import { readFile } from 'fs/promises';
+import { readFile, rm } from 'fs/promises';
 
 // first argument is the filename (e.g., 'src/scripts/my-script.user.ts')
 const filename = process.argv[2];
@@ -40,6 +40,14 @@ try {
 } catch (e) {
     console.error(`Error reading banner file: ${bannerFilename}`);
     console.error(e);
+    process.exit(1);
+}
+
+// clear the dist directory
+try {
+    await rm('dist', { recursive: true, force: true });
+} catch (e) {
+    console.error(`Error clearing dist directory: ${e}`);
     process.exit(1);
 }
 
