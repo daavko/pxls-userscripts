@@ -4,8 +4,10 @@ export function createDocumentFragment(html: string): DocumentFragment {
     return template.content;
 }
 
-export function createStyleElement(css: string): DocumentFragment {
-    return createDocumentFragment(`<style>${css}</style>`);
+export function addStylesheet(css: string): void {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(css);
+    document.adoptedStyleSheets.push(sheet);
 }
 
 export function createRandomElementId(): string {
