@@ -1,7 +1,19 @@
+import { getDpus } from './pxls-init';
+
 declare global {
-    interface Window {
-        dpusStyleSheets?: string[];
+    interface DPUS {
+        dpusDocument: {
+            stylesheets: string[];
+        };
     }
+}
+
+function getDpusDocument(): DPUS['dpusDocument'] {
+    const dpus = getDpus();
+    dpus.dpusDocument ??= {
+        stylesheets: [],
+    };
+    return dpus.dpusDocument;
 }
 
 export function createDocumentFragment(html: string): DocumentFragment {
@@ -11,16 +23,16 @@ export function createDocumentFragment(html: string): DocumentFragment {
 }
 
 export function addStylesheet(name: string, css: string): void {
-    window.dpusStyleSheets ??= [];
+    const dpusDocument = getDpusDocument();
 
-    if (window.dpusStyleSheets.includes(name)) {
+    if (dpusDocument.stylesheets.includes(name)) {
         return;
     }
 
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(css);
     document.adoptedStyleSheets.push(sheet);
-    window.dpusStyleSheets.push(name);
+    dpusDocument.stylesheets.push(name);
 }
 
 export function createRandomElementId(): string {

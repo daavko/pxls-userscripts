@@ -1,11 +1,20 @@
 import { ZodError } from 'zod';
 import { type PxlsInfoResponse, pxlsInfoResponseSchema } from '../pxls/pxls-types';
 import { showErrorMessage } from './message';
+import { getDpus } from './pxls-init';
 
 declare global {
-    interface Window {
-        dpusPxlsInfo?: InfoFetchState;
+    interface DPUS {
+        pxlsFetch: {
+            info?: InfoFetchState;
+        };
     }
+}
+
+function getDpusPxlsFetch(): DPUS['pxlsFetch'] {
+    const dpus = getDpus();
+    dpus.pxlsFetch ??= {};
+    return dpus.pxlsFetch;
 }
 
 interface PendingInfoFetch {
@@ -21,15 +30,16 @@ interface FinishedInfoFetch {
 type InfoFetchState = PendingInfoFetch | FinishedInfoFetch;
 
 export async function getPxlsInfo(): Promise<PxlsInfoResponse | null> {
-    if (window.dpusPxlsInfo) {
-        if (window.dpusPxlsInfo.state === 'pending') {
-            return window.dpusPxlsInfo.promise;
-        } else if (window.dpusPxlsInfo.state === 'finished') {
-            return window.dpusPxlsInfo.data;
+    const dpusPxlsFetch = getDpusPxlsFetch();
+    if (dpusPxlsFetch.info) {
+        if (dpusPxlsFetch.info.state === 'pending') {
+            return dpusPxlsFetch.info.promise;
+        } else if (dpusPxlsFetch.info.state === 'finished') {
+            return dpusPxlsFetch.info.data;
         }
     }
 
-    window.dpusPxlsInfo = {
+    dpusPxlsFetch.info = {
         state: 'pending',
         promise: fetchInfo().catch((error: unknown) => {
             if (error instanceof ZodError) {
@@ -40,7 +50,7 @@ export async function getPxlsInfo(): Promise<PxlsInfoResponse | null> {
             return null;
         }),
     };
-    return window.dpusPxlsInfo.promise;
+    return dpusPxlsFetch.info.promise;
 }
 
 async function fetchInfo(): Promise<PxlsInfoResponse> {
