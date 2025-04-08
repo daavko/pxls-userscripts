@@ -68,7 +68,7 @@ function getOrInitMessageContainer(): Element {
 }
 
 function createMessageContainer(): Element {
-    addStylesheet(messageContainerStyle);
+    addStylesheet('dpus__message-container', messageContainerStyle);
 
     const messageContainer = createDocumentFragment(`
         <div class="dpus__message-container"></div>
