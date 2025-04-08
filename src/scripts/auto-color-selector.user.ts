@@ -8,9 +8,12 @@ import { getPxlsUIBoard, getPxlsUIMouseCoords } from '../modules/pxls-ui';
 import { createScriptSettings, getGlobalSettings, initGlobalSettings } from '../modules/settings';
 import {
     createBooleanSetting,
+    createKeyboardShortcutText,
+    createLineBreak,
     createSettingsResetButton,
     createSettingsText,
     createSettingsUI,
+    createSubheading,
 } from '../modules/settings-ui';
 import { detemplatizeImageWorker, getTemplateImage } from '../modules/template';
 
@@ -53,6 +56,10 @@ const coordsMutationObserver = new MutationObserver(() => {
 
 function initSettings(): void {
     createSettingsUI('Template color autoselector', () => [
+        createSubheading('Keybinds'),
+        createKeyboardShortcutText('Z', 'Toggle auto-select color'),
+        createLineBreak(),
+        createSubheading('Settings'),
         createBooleanSetting(getGlobalSettings(), 'debug', 'Debug logging'),
         createBooleanSetting(settings, 'deselectColorOutsideTemplate', 'Deselect color outside template'),
         createBooleanSetting(
