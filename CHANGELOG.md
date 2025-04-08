@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## Template color autoselector v2.1.0
+
+- Show keybinds in the settings menu
+- Fix race condition on initial load that would sometimes cause the template not to load
+- Polish log messages and popup messages
+- Various small internal refactorings
+
 ## Template color autoselector v2.0.0
 
 - Rewrite everything to TS, with a ESbuild build system.
