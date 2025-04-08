@@ -1,0 +1,33 @@
+.dpus__message-container {
+    position: absolute;
+    top: 5px;
+    left: 5px;
+    right: 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    pointer-events: none;
+    z-index: 100;
+}
+
+@media (width >= 1280px) {
+    .dpus__message-container {
+        left: 15vw;
+        right: 15vw;
+    }
+}
+
+.dpus__message {
+    color: white;
+    padding: 5px;
+    border-radius: 5px;
+}
+
+.dpus__message--success {
+    background-color: darkgreen;
+}
+
+.dpus__message--error {
+    background-color: darkred;
+}

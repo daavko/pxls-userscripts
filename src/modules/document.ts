@@ -4,6 +4,10 @@ export function createDocumentFragment(html: string): DocumentFragment {
     return template.content;
 }
 
+export function createStyleElement(css: string): DocumentFragment {
+    return createDocumentFragment(`<style>${css}</style>`);
+}
+
 export function createRandomElementId(): string {
     return `dpus-${crypto.randomUUID()}`;
 }

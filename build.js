@@ -54,25 +54,42 @@ const esbuildOptions = {
     sourcemap: options.sourcemap ? 'inline' : false,
 };
 
+const cssMinifyPlugin = {
+    name: 'css-minify',
+    setup(build) {
+        build.onLoad({ filter: /\.css$/ }, async (args) => {
+            const css = await esbuild.build({
+                entryPoints: [args.path],
+                loader: { '.css': 'css' },
+                bundle: true,
+                minify: options.minify,
+                write: false,
+            });
+            return {
+                contents: css.outputFiles[0].text,
+                loader: 'text',
+            };
+        });
+    },
+};
+const watchPlugin = {
+    name: 'watch-plugin',
+    setup(build) {
+        build.onStart(() => {
+            console.log('Building...');
+        });
+        build.onEnd(() => {
+            console.log('Build complete.');
+        });
+    },
+};
+
 // build the script using esbuild
 if (options.watch) {
     console.log(`Watching ${filename}...`);
-    const plugins = [
-        {
-            name: 'watch-plugin',
-            setup(build) {
-                build.onStart(() => {
-                    console.log('Building...');
-                });
-                build.onEnd(() => {
-                    console.log('Build complete.');
-                });
-            },
-        },
-    ];
     const context = await esbuild.context({
         ...esbuildOptions,
-        plugins,
+        plugins: [cssMinifyPlugin, watchPlugin],
     });
     await context.rebuild();
     console.log('Watching for changes...');
@@ -81,6 +98,7 @@ if (options.watch) {
     console.log(`Building ${filename}...`);
     await esbuild.build({
         ...esbuildOptions,
+        plugins: [cssMinifyPlugin],
     });
     console.log(`Build complete. Output in 'dist' directory.`);
 }

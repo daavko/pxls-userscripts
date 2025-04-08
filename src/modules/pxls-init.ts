@@ -63,7 +63,7 @@ async function waitForLogin(): Promise<void> {
                     debug('User not logged in, waiting for login state');
                 }
             } else {
-                showErrorMessage('Login state received is not a boolean');
+                showErrorMessage('Login state received is not a boolean', loggedInParseResult.error);
             }
         });
     });
