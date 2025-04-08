@@ -33,11 +33,9 @@ export async function getPxlsInfo(): Promise<PxlsInfoResponse | null> {
         state: 'pending',
         promise: fetchInfo().catch((error: unknown) => {
             if (error instanceof ZodError) {
-                showErrorMessage(`Failed to parse /info response: ${error.message}`);
-                console.error('Failed to parse /info response', error);
+                showErrorMessage(`Failed to parse /info response`, error);
             } else if (error instanceof Error) {
-                showErrorMessage(`Failed to fetch /info: ${error.message}`);
-                console.error('Failed to fetch /info', error);
+                showErrorMessage(`Failed to fetch /info`, error);
             }
             return null;
         }),

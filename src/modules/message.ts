@@ -1,19 +1,26 @@
-import { createDocumentFragment } from './document';
+import { debug } from './debug';
+import { createDocumentFragment, createStyleElement } from './document';
+import messageContainerStyle from './message.css';
 
 export type MessageType = 'success' | 'error';
 
-const DEFAULT_MESSAGE_DURATION = 5000;
+const DEFAULT_SUCCESS_MESSAGE_DURATION = 3000;
+const DEFAULT_ERROR_MESSAGE_DURATION = 5000;
 
 let MESSAGE_CONTAINER: Element | null = null;
+let MESSAGE_PREFIX: string | null = null;
 
-export function showMessage(message: string, type: MessageType, duration = DEFAULT_MESSAGE_DURATION): void {
+export function setMessagePrefix(prefix: string): void {
+    MESSAGE_PREFIX = prefix;
+}
+
+export function showMessage(message: string, type: MessageType, duration: number): void {
     let messageDivTypeClass: string;
     switch (type) {
         case 'success':
             messageDivTypeClass = 'dpus__message--success';
             break;
         case 'error':
-            console.error(message);
             messageDivTypeClass = 'dpus__message--error';
             break;
         default:
@@ -21,7 +28,7 @@ export function showMessage(message: string, type: MessageType, duration = DEFAU
     }
 
     const messageDiv = createDocumentFragment(`
-        <div class="dpus__message ${messageDivTypeClass}">${message}</div>
+        <div class="dpus__message ${messageDivTypeClass}">[${MESSAGE_PREFIX}] ${message}</div>
     `);
 
     const messageDivChildren = Array.from(messageDiv.children);
@@ -34,11 +41,15 @@ export function showMessage(message: string, type: MessageType, duration = DEFAU
     }, duration);
 }
 
-export function showSuccessMessage(message: string, duration = DEFAULT_MESSAGE_DURATION): void {
+export function showSuccessMessage(message: string, duration = DEFAULT_SUCCESS_MESSAGE_DURATION): void {
+    debug('Showing success message:', message);
     showMessage(message, 'success', duration);
 }
 
-export function showErrorMessage(message: string, duration = DEFAULT_MESSAGE_DURATION): void {
+export function showErrorMessage(message: string, context?: Error, duration = DEFAULT_ERROR_MESSAGE_DURATION): void {
+    if (context) {
+        console.error(`[${MESSAGE_PREFIX}] ${message}`, context);
+    }
     showMessage(message, 'error', duration);
 }
 
@@ -57,43 +68,7 @@ function getOrInitMessageContainer(): Element {
 }
 
 function createMessageContainer(): Element {
-    const messageContainerStyles = createDocumentFragment(`
-        <style>
-            .dpus__message-container {
-                position: absolute;
-                top: 5px;
-                left: 5px;
-                right: 5px;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: 5px;
-                pointer-events: none;
-                z-index: 100;
-            }
-            
-            @media (width >= 1280px) {
-                .dpus__message-container {
-                    left: 15vw;
-                    right: 15vw;
-                }
-            }
-            
-            .dpus__message {
-                color: white;
-                padding: 5px;
-                border-radius: 5px;
-            }
-            
-            .dpus__message--success {
-                background-color: darkgreen;
-            }
-            
-            .dpus__message--error {
-                background-color: darkred;
-            }
-        </style>
-    `);
+    const messageContainerStyles = createStyleElement(messageContainerStyle);
     const messageContainer = createDocumentFragment(`
         <div class="dpus__message-container"></div>
     `).children[0];

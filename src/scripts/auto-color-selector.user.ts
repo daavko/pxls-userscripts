@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { debug, setDebugName } from '../modules/debug';
-import { showErrorMessage, showSuccessMessage } from '../modules/message';
+import { setMessagePrefix, showErrorMessage, showSuccessMessage } from '../modules/message';
 import { getApp, waitForApp } from '../modules/pxls-init';
 import { anyColorSelected, getFastLookupPalette, selectColor, unselectColor } from '../modules/pxls-palette';
-import { getTemplateWidth, getTemplateX, getTemplateY, watchTemplateWidth } from '../modules/pxls-template';
-import { getPxlsUIBoard, getPxlsUIMouseCoords, getPxlsUITemplateImage } from '../modules/pxls-ui';
+import { getCurrentTemplate, TEMPLATE_CHANGE_EVENT_NAME, type TemplateData } from '../modules/pxls-template';
+import { getPxlsUIBoard, getPxlsUIMouseCoords } from '../modules/pxls-ui';
 import { createScriptSettings, getGlobalSettings, initGlobalSettings } from '../modules/settings';
 import {
     createBooleanSetting,
@@ -12,9 +12,10 @@ import {
     createSettingsText,
     createSettingsUI,
 } from '../modules/settings-ui';
-import { detemplatizeImageWorker, getTemplateImage, watchTemplateImage } from '../modules/template';
+import { detemplatizeImageWorker, getTemplateImage } from '../modules/template';
 
 setDebugName('Template color autoselector');
+setMessagePrefix('Template color autoselector');
 initGlobalSettings('dpus_templateColorAutoselector_globalSettings');
 
 const settingsSchema = z
@@ -69,8 +70,8 @@ function initBoardEventListeners(): void {
     const board = getPxlsUIBoard();
     board.addEventListener(
         'pointerdown',
-        (event) => {
-            pointerDownCoords = { x: event.clientX, y: event.clientY };
+        ({ clientX, clientY }) => {
+            pointerDownCoords = { x: clientX, y: clientY };
             pointerMoveFuse = false;
             debug(`Pointer down at ${pointerDownCoords.x}, ${pointerDownCoords.y}`);
         },
@@ -88,12 +89,12 @@ function initBoardEventListeners(): void {
     );
     board.addEventListener(
         'pointermove',
-        (event) => {
+        ({ clientX, clientY }) => {
             if (pointerDownCoords === null || pointerMoveFuse) {
                 return;
             }
 
-            const coords = { x: event.clientX, y: event.clientY };
+            const coords = { x: clientX, y: clientY };
             const distance = Math.sqrt((coords.x - pointerDownCoords.x) ** 2 + (coords.y - pointerDownCoords.y) ** 2);
             if (distance > 5) {
                 debug(`Pointer move fuse triggered at ${coords.x},${coords.y} distance ${distance}`);
@@ -124,43 +125,31 @@ function initBodyEventListeners(): void {
 }
 
 async function init(): Promise<void> {
-    debug('Initializing');
+    await waitForApp();
+    palette = await getFastLookupPalette();
+
+    debug('Initializing script');
 
     initSettings();
+    initBoardEventListeners();
+    initBodyEventListeners();
+    enableCoordsMutationObserver(true);
 
-    try {
-        palette = await getFastLookupPalette();
-
-        debug('Observing coords element for changes');
-        enableCoordsMutationObserver(true);
-
-        initBoardEventListeners();
-        initBodyEventListeners();
-
-        watchTemplateWidth(() => {
-            debug('Template width changed');
-            templateParamChanged();
-        }, false);
-
-        watchTemplateImage((_, currentSrc) => {
-            if (currentSrc !== '') {
-                debug('Template image changed');
-                templateParamChanged();
+    window.addEventListener(TEMPLATE_CHANGE_EVENT_NAME, ({ detail: template }) => {
+        if (template == null) {
+            if (detemplatizedTemplate != null) {
+                clearTemplate();
+                showSuccessMessage('Template cleared');
             }
-        }, false);
+        } else {
+            templateChanged(template);
+        }
+    });
 
-        const templateWidth = getTemplateWidth();
-        const templateImageElement = getPxlsUITemplateImage();
-        if (templateImageElement.src !== '' && templateWidth != null && templateWidth > 0) {
-            debug('Template image already set, loading');
-            templateParamChanged();
-        }
-    } catch (e: unknown) {
-        if (e instanceof Error) {
-            showErrorMessage(e.message);
-            return;
-        }
-        showErrorMessage('Error in init: ' + String(e));
+    const template = getCurrentTemplate();
+    if (template) {
+        debug('Template already set, loading');
+        templateChanged(template);
     }
 }
 
@@ -170,9 +159,8 @@ function processCoords(): void {
         return;
     }
 
-    const templateX = getTemplateX();
-    const templateY = getTemplateY();
-    if (detemplatizedTemplate == null || templateX == null || templateY == null) {
+    const template = getCurrentTemplate();
+    if (detemplatizedTemplate == null || template?.x == null || template?.y == null) {
         // no template = nothing to do
         return;
     }
@@ -205,7 +193,7 @@ function processCoords(): void {
     currentCoordX = x;
     currentCoordY = y;
 
-    coordsChanged(x - templateX, y - templateY);
+    coordsChanged(x - template.x, y - template.y);
 }
 
 function coordsChanged(x: number, y: number): void {
@@ -251,29 +239,13 @@ function coordsChanged(x: number, y: number): void {
     }
 }
 
-function templateParamChanged(): void {
-    const width = getTemplateWidth();
-    const x = getTemplateX();
-    const y = getTemplateY();
-    const templateImageElement = getPxlsUITemplateImage();
+function clearTemplate(): void {
+    detemplatizedTemplate = null;
+    detemplatizedTemplateUint32View = null;
+}
 
-    if (templateImageElement.src === '' || width == null || width === 0) {
-        // no template, clear detemplatizedTemplate
-        debug('No template, clearing detemplatized template');
-        detemplatizedTemplate = null;
-        detemplatizedTemplateUint32View = null;
-        return;
-    }
-
-    if (width < 0 || Number.isNaN(width)) {
-        showErrorMessage('Invalid template width');
-        return;
-    }
-
-    if (x == null || x < 0 || y == null || y < 0) {
-        showErrorMessage('Invalid template coords');
-        return;
-    }
+function templateChanged(template: TemplateData): void {
+    const width = template.width;
 
     getTemplateImage()
         .then(async (imageData) => {
@@ -284,10 +256,10 @@ function templateParamChanged(): void {
             debug('Template image detemplatized');
             detemplatizedTemplate = detemplatizedImageData;
             detemplatizedTemplateUint32View = new Uint32Array(detemplatizedImageData.data.buffer);
-            showSuccessMessage('AutoColorSelector template loaded');
+            showSuccessMessage('Template loaded');
         })
         .catch((error: Error) => {
-            showErrorMessage(error.message);
+            showErrorMessage(`Failed to load template image: ${error.message}`, error);
         });
 }
 
@@ -302,7 +274,7 @@ function enableCoordsMutationObserver(silent = false): void {
     coordsMutationEnabled = true;
     processCoords();
     if (!silent) {
-        showSuccessMessage('AutoColorSelector enabled', 1000);
+        showSuccessMessage('Enabled', 1000);
     }
 }
 
@@ -316,7 +288,7 @@ function disableCoordsMutationObserver(silent = false): void {
     coordsMutationObserver.disconnect();
     coordsMutationEnabled = false;
     if (!silent) {
-        showSuccessMessage('AutoColorSelector disabled', 1000);
+        showSuccessMessage('Disabled', 1000);
     }
 }
 
@@ -326,13 +298,11 @@ function maybeEnableCoordsMutationObserver(silent = false): void {
     }
 }
 
-debug('Starting Template color autoselector script');
-waitForApp()
-    .then(async () => {
-        debug('PxlS initialized, starting script');
-        return init();
-    })
-    .catch((e: Error) => {
-        console.error(e);
-        showErrorMessage(`Failed to initialize: ${e.message}`);
-    });
+init().catch((e: unknown) => {
+    if (e instanceof Error) {
+        showErrorMessage(`Error during initialization: ${e.message}`, e);
+        return;
+    } else {
+        showErrorMessage('Unknown error during initialization', new Error('Unknown error', { cause: e }));
+    }
+});

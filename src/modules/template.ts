@@ -1,53 +1,14 @@
-import { workerDebug, workerDebugEnabled, workerDebugName, workerDebugTime } from '../util/worker';
-import { debug, debugTime } from './debug';
+import { createSetDebugEnabledShim, createWorkerDebugShim } from '../util/worker';
+import { debug, debugEnabled, debugTime } from './debug';
 import { hashInWorker } from './hash';
 import { getPxlsUITemplateImage } from './pxls-ui';
-import { getGlobalSettings } from './settings';
 
-type TemplateChangeCallback = (previousSrc: string | null, currentSrc: string, img: HTMLImageElement) => void;
-
-const TEMPLATE_CHANGE_CALLBACKS = new Set<TemplateChangeCallback>();
-const templateChangeObserver = new MutationObserver((mutations) => {
-    const srcMutation = mutations.find((mut) => {
-        return mut.type === 'attributes' && mut.attributeName === 'src';
-    });
-    if (srcMutation) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-        const img = srcMutation.target as HTMLImageElement;
-        const previousSrc = srcMutation.oldValue;
-        const currentSrc = img.src;
-        if (previousSrc !== currentSrc) {
-            debug(`Template image src changed from ${previousSrc} to ${currentSrc}`);
-            for (const callback of TEMPLATE_CHANGE_CALLBACKS) {
-                callback(previousSrc, currentSrc, img);
-            }
-        }
-    }
-});
-
-export function watchTemplateImage(callback: TemplateChangeCallback, callWithCurrentValue = true): void {
-    TEMPLATE_CHANGE_CALLBACKS.add(callback);
-    const img = getPxlsUITemplateImage();
-    if (TEMPLATE_CHANGE_CALLBACKS.size === 1) {
-        templateChangeObserver.observe(img, {
-            attributes: true,
-            attributeOldValue: true,
-            attributeFilter: ['src'],
-        });
-    }
-    if (callWithCurrentValue) {
-        callback(null, img.src, img);
-    }
+export interface TemplateImage {
+    url: string;
+    imageData: ImageData;
 }
 
-export function unwatchTemplateImage(callback: TemplateChangeCallback): void {
-    TEMPLATE_CHANGE_CALLBACKS.delete(callback);
-    if (TEMPLATE_CHANGE_CALLBACKS.size === 0) {
-        templateChangeObserver.disconnect();
-    }
-}
-
-export async function getTemplateImage(): Promise<ImageData> {
+export async function getTemplateImage(): Promise<TemplateImage> {
     const debugTimer = debugTime('getTemplateImage');
 
     const img = getPxlsUITemplateImage();
@@ -71,46 +32,47 @@ export async function getTemplateImage(): Promise<ImageData> {
     const imageData = ctx.getImageData(0, 0, imgWidth, imgHeight);
 
     debugTimer?.stop();
-    return imageData;
+    return {
+        url: img.src,
+        imageData,
+    };
 }
 
 const DETEMPLATIZE_CACHE_SIZE = 10;
 const DETEMPLATIZE_CACHE = new Map<string, ImageData>();
 
-function addToDetemplatizeCache(key: string, image: ImageData): void {
+function createDetemplatizeCacheKey(key: string, targetWidth: number): string {
+    return `${key}-${targetWidth}`;
+}
+
+function addToDetemplatizeCache(key: string, targetWidth: number, image: ImageData): void {
     while (DETEMPLATIZE_CACHE.size >= DETEMPLATIZE_CACHE_SIZE) {
         const firstKey = DETEMPLATIZE_CACHE.keys().next().value!;
         DETEMPLATIZE_CACHE.delete(firstKey);
     }
-    DETEMPLATIZE_CACHE.set(key, image);
+    DETEMPLATIZE_CACHE.set(createDetemplatizeCacheKey(key, targetWidth), image);
 }
 
-function getFromDetemplatizeCache(key: string): ImageData | undefined {
-    return DETEMPLATIZE_CACHE.get(key);
+function getFromDetemplatizeCache(key: string, targetWidth: number): ImageData | undefined {
+    return DETEMPLATIZE_CACHE.get(createDetemplatizeCacheKey(key, targetWidth));
 }
 
-const DETEMPLATIZE_WORKER_NAME = 'detemplatizeImageWorker';
 const DETEMPLATIZE_WORKER_SCRIPT = `
-let debugEnabled = false;
-let ${workerDebugEnabled.name} = () => debugEnabled;
-let ${workerDebugName.name} = () => '${DETEMPLATIZE_WORKER_NAME}';
-const ${debug.name} = ${workerDebug.toString()};
-const ${debugTime.name} = ${workerDebugTime.toString()}
+${createWorkerDebugShim('detemplatizeImageWorker')}
 
 self.onmessage = (e) => {
     const { image, targetWidth } = e.data;
-    debugEnabled = e.data.debugEnabled;
-    
+    ${createSetDebugEnabledShim()}
+
     try {
-        const targetImage = ${detemplatizeImage.name}(image, targetWidth);
+        const targetImage = ${processDetemplatizeImage.name}(image, targetWidth);
         self.postMessage({ type: 'success', image: targetImage });
     } catch (error) {
-        console.error('Error in worker:', error);
         self.postMessage({ type: 'error', error });
     }
 }
 
-${detemplatizeImage.toString()}
+${processDetemplatizeImage.toString()}
 
 ${getCellColor.toString()}
 `;
@@ -127,9 +89,18 @@ interface DetemplatizeWorkerSuccessResult {
 
 type DetemplatizeWorkerResult = DetemplatizeWorkerErrorResult | DetemplatizeWorkerSuccessResult;
 
-export async function detemplatizeImageWorker(image: ImageData, targetWidth: number): Promise<ImageData> {
-    const imageHash = await hashInWorker(image.data);
-    const cachedImage = getFromDetemplatizeCache(imageHash);
+export async function detemplatizeImageWorker(template: TemplateImage, targetWidth: number): Promise<ImageData> {
+    if (template.url.startsWith('data:')) {
+        // data URLs are cacheable directly without hashing, since they are already unique
+        const cachedImage = getFromDetemplatizeCache(template.url, targetWidth);
+        if (cachedImage) {
+            debug('Using cached image for data URL', template.url);
+            return cachedImage;
+        }
+    }
+
+    const imageHash = await hashInWorker(template.imageData.data);
+    const cachedImage = getFromDetemplatizeCache(imageHash, targetWidth);
     if (cachedImage) {
         debug(`Using cached image for hash ${imageHash}`);
         return cachedImage;
@@ -149,16 +120,15 @@ export async function detemplatizeImageWorker(image: ImageData, targetWidth: num
                     reject(e.data.error);
                     break;
                 default:
-                    debug(`Worker returned unknown result: ${String(e.data as unknown)}`);
-                    reject(new Error(`Worker returned unknown result: ${String(e.data as unknown)}`));
+                    reject(new Error('Detemplatize worker returned unknown result', { cause: e.data }));
             }
         };
 
         worker.onerror = (e): void => {
-            reject(new Error(`Worker error: ${e.message}`, { cause: e.error }));
+            reject(new Error('Unknown detemplatize worker error', { cause: e.error }));
         };
 
-        worker.postMessage({ image, targetWidth, debugEnabled: getGlobalSettings().get('debug') });
+        worker.postMessage({ image: template.imageData, targetWidth, debugEnabled: debugEnabled() });
     });
     void resultPromise.finally(() => {
         worker.terminate();
@@ -166,25 +136,29 @@ export async function detemplatizeImageWorker(image: ImageData, targetWidth: num
         debugTimer?.stop();
     });
     void resultPromise.then((result) => {
-        addToDetemplatizeCache(imageHash, result);
+        if (template.url.startsWith('data:')) {
+            addToDetemplatizeCache(template.url, targetWidth, result);
+        } else {
+            addToDetemplatizeCache(imageHash, targetWidth, result);
+        }
     });
     return resultPromise;
 }
 
-export function detemplatizeImage(image: ImageData, targetWidth: number): ImageData {
-    const debugTimer = debugTime('detemplatizeImage');
+function processDetemplatizeImage(image: ImageData, targetWidth: number): ImageData {
+    const debugTimer = debugTime('processDetemplatizeImage');
 
     const scaleFactor = image.width / targetWidth;
     if (!Number.isInteger(scaleFactor)) {
         debugTimer?.stop();
-        debug(`Non-integer scale factor for image width ${image.width}, target width ${targetWidth}: ${scaleFactor}`);
-        throw new Error('Template image width does not divide evenly by target width');
+        throw new Error('Template image width does not divide evenly by target width', {
+            cause: { width: image.width, targetWidth, scaleFactor },
+        });
     } else if (image.height % scaleFactor !== 0) {
         debugTimer?.stop();
-        debug(
-            `Image height ${image.height} is not a multiple of scale factor ${scaleFactor}, target width ${targetWidth}`,
-        );
-        throw new Error('Template height is not a multiple of scale factor');
+        throw new Error('Template height is not a multiple of scale factor', {
+            cause: { height: image.height, targetWidth, scaleFactor },
+        });
     }
 
     const targetHeight = image.height / scaleFactor;
@@ -233,10 +207,9 @@ function getCellColor(
                 continue;
             }
             if (a !== 255) {
-                debug(
-                    `Pixel block for downscaling (position ${x}, ${y}, scaled ${cellSize}x) has alpha value other than 0 or 255 (actual: ${a})`,
-                );
-                throw new Error('Pixel block for downscaling has alpha value other than 0 or 255');
+                throw new Error('Pixel block for downscaling has alpha value other than 0 or 255', {
+                    cause: { x, y, cellSize, a },
+                });
             }
 
             if (pixel != null) {
@@ -248,11 +221,9 @@ function getCellColor(
                     const b = (pixelColor >> 16) & 0xff;
                     const g = (pixelColor >> 8) & 0xff;
                     const r = pixelColor & 0xff;
-                    debug(
-                        `Pixel block for downscaling (position ${x}, ${y}; block position ${blockX}, ${blockY}; scaled ${cellSize}x) has more than one color (previous: ${previousR}, ${previousG}, ${previousB}, current: ${r}, ${g}, ${b})`,
-                    );
                     throw new Error(
                         'Pixel block for downscaling has more than one color. If you have Firefox Enhanced Tracking Protection enabled, try disabling it for this site.',
+                        { cause: { x, y, blockX, blockY, cellSize, previousR, previousG, previousB, r, g, b } },
                     );
                 }
             } else {
