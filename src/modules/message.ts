@@ -1,5 +1,5 @@
 import { debug } from './debug';
-import { createDocumentFragment, createStyleElement } from './document';
+import { addStylesheet, createDocumentFragment } from './document';
 import messageContainerStyle from './message.css';
 
 export type MessageType = 'success' | 'error';
@@ -68,12 +68,11 @@ function getOrInitMessageContainer(): Element {
 }
 
 function createMessageContainer(): Element {
-    const messageContainerStyles = createStyleElement(messageContainerStyle);
+    addStylesheet(messageContainerStyle);
+
     const messageContainer = createDocumentFragment(`
         <div class="dpus__message-container"></div>
     `).children[0];
-
-    document.body.appendChild(messageContainerStyles);
     document.body.appendChild(messageContainer);
 
     return messageContainer;
