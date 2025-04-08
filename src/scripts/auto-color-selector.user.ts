@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { debug, setDebugName } from '../modules/debug';
 import { setMessagePrefix, showErrorMessage, showSuccessMessage } from '../modules/message';
-import { getApp, waitForApp } from '../modules/pxls-init';
+import { getApp, globalInit, waitForApp } from '../modules/pxls-init';
 import { anyColorSelected, getFastLookupPalette, selectColor, unselectColor } from '../modules/pxls-palette';
 import { getCurrentTemplate, TEMPLATE_CHANGE_EVENT_NAME, type TemplateData } from '../modules/pxls-template';
 import { getPxlsUIBoard, getPxlsUIMouseCoords } from '../modules/pxls-ui';
@@ -14,6 +14,7 @@ import {
 } from '../modules/settings-ui';
 import { detemplatizeImageWorker, getTemplateImage } from '../modules/template';
 
+globalInit();
 setDebugName('Template color autoselector');
 setMessagePrefix('Template color autoselector');
 initGlobalSettings('dpus_templateColorAutoselector_globalSettings');

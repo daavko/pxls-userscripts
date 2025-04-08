@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { NullableKeys } from '../util/types';
 import { debug } from './debug';
-import { getApp } from './pxls-init';
+import { getApp, getDpus } from './pxls-init';
 import {
     getPxlsUITemplateImage,
     getPxlsUITemplateWidthInput,
@@ -15,6 +15,22 @@ declare global {
     interface WindowEventMap {
         [TEMPLATE_CHANGE_EVENT_NAME]: CustomEvent<TemplateData | null>;
     }
+
+    interface DPUS {
+        pxlsTemplate: {
+            eventsBound: boolean;
+            lastDispatchedTemplateData: TemplateData | null;
+        };
+    }
+}
+
+function getDpusPxlsTemplate(): DPUS['pxlsTemplate'] {
+    const dpus = getDpus();
+    dpus.pxlsTemplate ??= {
+        eventsBound: false,
+        lastDispatchedTemplateData: null,
+    };
+    return dpus.pxlsTemplate;
 }
 
 export interface TemplateData {
@@ -25,8 +41,6 @@ export interface TemplateData {
 }
 
 type TemplateChangeData = NullableKeys<TemplateData>;
-
-let lastDispatchedTemplateData: TemplateData | null = null;
 
 const lastKnownTemplateData: TemplateChangeData = {
     src: null,
@@ -78,18 +92,19 @@ function isTemplateChangeDataComplete(data: TemplateChangeData): data is Templat
 
 function maybeDispatchTemplateChangeEvent(): void {
     const dataIsComplete = isTemplateChangeDataComplete(lastKnownTemplateData);
-    if (dataIsComplete && lastDispatchedTemplateData !== null) {
+    const lastDispatchedData = getDpusPxlsTemplate().lastDispatchedTemplateData;
+    if (dataIsComplete && lastDispatchedData !== null) {
         const isDifferent =
-            lastDispatchedTemplateData.src !== lastKnownTemplateData.src ||
-            lastDispatchedTemplateData.width !== lastKnownTemplateData.width ||
-            lastDispatchedTemplateData.x !== lastKnownTemplateData.x ||
-            lastDispatchedTemplateData.y !== lastKnownTemplateData.y;
+            lastDispatchedData.src !== lastKnownTemplateData.src ||
+            lastDispatchedData.width !== lastKnownTemplateData.width ||
+            lastDispatchedData.x !== lastKnownTemplateData.x ||
+            lastDispatchedData.y !== lastKnownTemplateData.y;
         if (isDifferent) {
             dispatchTemplateChangeEvent({ ...lastKnownTemplateData });
         }
-    } else if (dataIsComplete && lastDispatchedTemplateData === null) {
+    } else if (dataIsComplete && lastDispatchedData === null) {
         dispatchTemplateChangeEvent({ ...lastKnownTemplateData });
-    } else if (!dataIsComplete && lastDispatchedTemplateData !== null) {
+    } else if (!dataIsComplete && lastDispatchedData !== null) {
         dispatchTemplateChangeEvent(null);
     }
 }
@@ -99,7 +114,7 @@ function dispatchTemplateChangeEvent(data: TemplateData | null): void {
         detail: data,
     });
     debug('Dispatching template change event', data);
-    lastDispatchedTemplateData = data;
+    getDpusPxlsTemplate().lastDispatchedTemplateData = data;
     window.dispatchEvent(event);
 }
 
@@ -117,72 +132,80 @@ function parseQueryParameterValue(value: string | null): number | null {
 }
 
 export function initTemplateEventHandlers(): void {
-    getPxlsUITemplateWidthInput().addEventListener('change', function () {
-        const value = this.valueAsNumber;
-        if (Number.isNaN(value) || value <= 0) {
-            changeTemplateDataProperty('width', null);
-        } else {
-            changeTemplateDataProperty('width', value);
-        }
-    });
-    getPxlsUITemplateXInput().addEventListener('change', function () {
-        const value = this.valueAsNumber;
-        if (Number.isNaN(value)) {
-            changeTemplateDataProperty('x', null);
-        } else {
-            changeTemplateDataProperty('x', value);
-        }
-    });
-    getPxlsUITemplateYInput().addEventListener('change', function () {
-        const value = this.valueAsNumber;
-        if (Number.isNaN(value)) {
-            changeTemplateDataProperty('y', null);
-        } else {
-            changeTemplateDataProperty('y', value);
-        }
-    });
+    const dpusPxlsTemplate = getDpusPxlsTemplate();
+    const bindEvents = !dpusPxlsTemplate.eventsBound;
 
-    const pxlsQueryUpdatedSchema = z.object({
-        parameter: z.string(),
-        value: z.string().nullable(),
-    });
-    $(window).on('pxls:queryUpdated', (_e, parameterName: unknown, oldValue: unknown, newValue: unknown) => {
-        if (oldValue === newValue) {
-            return;
-        }
-
-        debug('pxls:queryUpdated', parameterName, oldValue, newValue);
-        const { parameter, value } = pxlsQueryUpdatedSchema.parse({
-            parameter: parameterName,
-            value: newValue,
+    if (bindEvents) {
+        getPxlsUITemplateWidthInput().addEventListener('change', function () {
+            const value = this.valueAsNumber;
+            if (Number.isNaN(value) || value <= 0) {
+                changeTemplateDataProperty('width', null);
+            } else {
+                changeTemplateDataProperty('width', value);
+            }
+        });
+        getPxlsUITemplateXInput().addEventListener('change', function () {
+            const value = this.valueAsNumber;
+            if (Number.isNaN(value)) {
+                changeTemplateDataProperty('x', null);
+            } else {
+                changeTemplateDataProperty('x', value);
+            }
+        });
+        getPxlsUITemplateYInput().addEventListener('change', function () {
+            const value = this.valueAsNumber;
+            if (Number.isNaN(value)) {
+                changeTemplateDataProperty('y', null);
+            } else {
+                changeTemplateDataProperty('y', value);
+            }
         });
 
-        switch (parameter) {
-            case 'tw': {
-                const parsedWidth = parseQueryParameterValue(value);
-                changeTemplateDataProperty('width', parsedWidth);
-                break;
+        const pxlsQueryUpdatedSchema = z.object({
+            parameter: z.string(),
+            value: z.string().nullable(),
+        });
+        $(window).on('pxls:queryUpdated', (_e, parameterName: unknown, oldValue: unknown, newValue: unknown) => {
+            if (oldValue === newValue) {
+                return;
             }
-            case 'ox': {
-                const parsedX = parseQueryParameterValue(value);
-                changeTemplateDataProperty('x', parsedX);
-                break;
+
+            debug('pxls:queryUpdated', parameterName, oldValue, newValue);
+            const { parameter, value } = pxlsQueryUpdatedSchema.parse({
+                parameter: parameterName,
+                value: newValue,
+            });
+
+            switch (parameter) {
+                case 'tw': {
+                    const parsedWidth = parseQueryParameterValue(value);
+                    changeTemplateDataProperty('width', parsedWidth);
+                    break;
+                }
+                case 'ox': {
+                    const parsedX = parseQueryParameterValue(value);
+                    changeTemplateDataProperty('x', parsedX);
+                    break;
+                }
+                case 'oy': {
+                    const parsedY = parseQueryParameterValue(value);
+                    changeTemplateDataProperty('y', parsedY);
+                    break;
+                }
             }
-            case 'oy': {
-                const parsedY = parseQueryParameterValue(value);
-                changeTemplateDataProperty('y', parsedY);
-                break;
-            }
-        }
-    });
+        });
+    }
 
     const templateImage = getPxlsUITemplateImage();
-    templateSrcChangeObserver.observe(templateImage, {
-        attributes: true,
-        attributeOldValue: true,
-        attributeFilter: ['src'],
-    });
-    templateResizeObserver.observe(templateImage);
+    if (bindEvents) {
+        templateSrcChangeObserver.observe(templateImage, {
+            attributes: true,
+            attributeOldValue: true,
+            attributeFilter: ['src'],
+        });
+        templateResizeObserver.observe(templateImage);
+    }
+
     const currentSrc = templateImage.src;
     if (currentSrc !== '') {
         changeTemplateDataProperty('src', currentSrc);
@@ -192,11 +215,14 @@ export function initTemplateEventHandlers(): void {
     changeTemplateDataProperty('width', parseQueryParameterValue(app.query.get('tw') ?? null));
     changeTemplateDataProperty('x', parseQueryParameterValue(app.query.get('ox') ?? null));
     changeTemplateDataProperty('y', parseQueryParameterValue(app.query.get('oy') ?? null));
+
+    dpusPxlsTemplate.eventsBound = true;
 }
 
 export function getCurrentTemplate(): TemplateData | null {
-    if (lastDispatchedTemplateData) {
-        return { ...lastDispatchedTemplateData };
+    const dpusPxlsTemplate = getDpusPxlsTemplate();
+    if (dpusPxlsTemplate.lastDispatchedTemplateData) {
+        return { ...dpusPxlsTemplate.lastDispatchedTemplateData };
     } else {
         return null;
     }

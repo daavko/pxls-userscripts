@@ -6,6 +6,19 @@ import { showErrorMessage } from './message';
 import { initTemplateEventHandlers } from './pxls-template';
 import { findUIElements } from './pxls-ui';
 
+declare global {
+    interface Window {
+        dpus?: Partial<DPUS>;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- intended to be extended
+    interface DPUS {}
+}
+
+export function globalInit(): void {
+    window.dpus ??= {};
+}
+
 export async function waitForApp(checkInterval = 1000): Promise<PxlsApp> {
     let app: PxlsApp;
     if (window.App) {
@@ -49,6 +62,11 @@ export function getApp(): PxlsApp {
         throw new Error('App is not initialized');
     }
     return window.App;
+}
+
+export function getDpus(): Partial<DPUS> {
+    window.dpus ??= {};
+    return window.dpus;
 }
 
 async function waitForLogin(): Promise<void> {
