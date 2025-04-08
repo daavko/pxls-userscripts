@@ -101,7 +101,17 @@ export function createSettingsResetButton(): DocumentFragment {
 }
 
 export function createSettingsText(text: string): DocumentFragment {
-    return createDocumentFragment(`
-        <p>${text}</p>
-    `);
+    return createDocumentFragment(`<p>${text}</p>`);
+}
+
+export function createSubheading(text: string): DocumentFragment {
+    return createDocumentFragment(`<h4>${text}</h4>`);
+}
+
+export function createKeyboardShortcutText(key: string, text: string): DocumentFragment {
+    return createDocumentFragment(`<p><kbd>${key}</kbd> - ${text}</p>`);
+}
+
+export function createLineBreak(): DocumentFragment {
+    return createDocumentFragment('<br>');
 }
