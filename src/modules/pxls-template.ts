@@ -66,17 +66,6 @@ const templateSrcChangeObserver = new MutationObserver((mutations) => {
         }
     }
 });
-const templateResizeObserver = new ResizeObserver((entries) => {
-    for (const entry of entries) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-        const { width } = entry.target as HTMLImageElement;
-        if (width === 0) {
-            changeTemplateDataProperty('width', null);
-        } else {
-            changeTemplateDataProperty('width', width);
-        }
-    }
-});
 
 function changeTemplateDataProperty<K extends keyof TemplateChangeData>(key: K, value: TemplateChangeData[K]): void {
     if (lastKnownTemplateData[key] !== value) {
@@ -203,7 +192,6 @@ export function initTemplateEventHandlers(): void {
             attributeOldValue: true,
             attributeFilter: ['src'],
         });
-        templateResizeObserver.observe(templateImage);
     }
 
     const currentSrc = templateImage.src;
