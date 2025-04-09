@@ -26,6 +26,7 @@
     "private": true,
     "sideEffects": false,
     "dependencies": {
+        "@mdi/js": "^7.4.47",
         "zod": "^3.24.2"
     }
 }

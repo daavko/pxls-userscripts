@@ -1,11 +1,12 @@
-export let PXLS_UI_BOARD: HTMLCanvasElement | null = null;
-export let PXLS_UI_TEMPLATE_IMAGE: HTMLImageElement | null = null;
-export let PXLS_UI_MOUSE_COORDS: HTMLElement | null = null;
-export let PXLS_UI_PALETTE_DESELECT_BUTTON: HTMLElement | null = null;
-export let PXLS_UI_PALETTE_SELECTION_BUTTONS: HTMLElement[] | null = null;
-export let PXLS_UI_TEMPLATE_WIDTH_INPUT: HTMLInputElement | null = null;
-export let PXLS_UI_TEMPLATE_X_INPUT: HTMLInputElement | null = null;
-export let PXLS_UI_TEMPLATE_Y_INPUT: HTMLInputElement | null = null;
+let PXLS_UI_BOARD: HTMLCanvasElement | null = null;
+let PXLS_UI_TEMPLATE_IMAGE: HTMLImageElement | null = null;
+let PXLS_UI_MOUSE_COORDS: HTMLElement | null = null;
+let PXLS_UI_PALETTE_DESELECT_BUTTON: HTMLElement | null = null;
+let PXLS_UI_PALETTE_SELECTION_BUTTONS: HTMLElement[] | null = null;
+let PXLS_UI_TEMPLATE_WIDTH_INPUT: HTMLInputElement | null = null;
+let PXLS_UI_TEMPLATE_X_INPUT: HTMLInputElement | null = null;
+let PXLS_UI_TEMPLATE_Y_INPUT: HTMLInputElement | null = null;
+let PXLS_UI_TOP_UI: HTMLElement | null = null;
 
 function getPxlsUIElement<T extends Element | Element[]>(getter: () => T | null, name: string): T {
     const element = getter();
@@ -45,6 +46,10 @@ export function getPxlsUITemplateXInput(): HTMLInputElement {
 
 export function getPxlsUITemplateYInput(): HTMLInputElement {
     return getPxlsUIElement(() => PXLS_UI_TEMPLATE_Y_INPUT, 'PXLS_UI_TEMPLATE_Y_INPUT');
+}
+
+export function getPxlsUITopUI(): HTMLElement {
+    return getPxlsUIElement(() => PXLS_UI_TOP_UI, 'PXLS_UI_TOP_UI');
 }
 
 export function findUIElements(): void {
@@ -90,5 +95,10 @@ export function findUIElements(): void {
     PXLS_UI_TEMPLATE_Y_INPUT = document.querySelector('input#template-coords-y');
     if (!PXLS_UI_TEMPLATE_Y_INPUT) {
         throw new Error('Failed to find template y input, this should never happen');
+    }
+
+    PXLS_UI_TOP_UI = document.querySelector('#ui > #ui-top');
+    if (!PXLS_UI_TOP_UI) {
+        throw new Error('Failed to find top UI, this should never happen');
     }
 }

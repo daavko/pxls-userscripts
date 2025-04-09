@@ -1,0 +1,54 @@
+.dpus__info-icons {
+    position: absolute;
+    bottom: 1rem;
+    right: 1rem;
+    display: flex;
+    gap: 8px;
+}
+
+@media (orientation: portrait) {
+    .dpus__info-icons {
+        flex-direction: column;
+    }
+}
+
+#main-bubble[position="bottom right"] + .dpus__info-icons {
+    right: unset;
+    left: 1rem;
+}
+
+.dpus__info-icon {
+    padding: 8px;
+    border-radius: 50%;
+    background-color: black;
+
+    svg {
+        display: block;
+        width: 24px;
+        height: 24px;
+    }
+}
+
+.dpus__info-icon--white svg {
+    fill: white;
+}
+
+.dpus__info-icon--green svg {
+    fill: limegreen;
+}
+
+.dpus__info-icon--red svg {
+    fill: red;
+}
+
+.dpus__info-icon--orange svg {
+    fill: orange;
+}
+
+.dpus__info-icon--gray svg {
+    fill: gray;
+}
+
+.dpus__info-icon--clickable {
+    cursor: pointer;
+}

@@ -1,6 +1,8 @@
+import { mdiEyedropper } from '@mdi/js';
 import { z } from 'zod';
 import { debug, setDebugName } from '../modules/debug';
-import { setMessagePrefix, showErrorMessage, showSuccessMessage } from '../modules/message';
+import { createInfoIcon, type InfoIcon, type InfoIconOptions, type InfoIconState } from '../modules/info-icon';
+import { setMessagePrefix, showErrorMessage } from '../modules/message';
 import { getApp, globalInit, waitForApp } from '../modules/pxls-init';
 import { anyColorSelected, getFastLookupPalette, selectColor, unselectColor } from '../modules/pxls-palette';
 import { getCurrentTemplate, TEMPLATE_CHANGE_EVENT_NAME, type TemplateData } from '../modules/pxls-template';
@@ -45,7 +47,7 @@ let currentCoordY: number | null = null;
 
 let pointerDownCoords: { x: number; y: number } | null = null;
 
-let hotkeyToggle = true;
+let manualToggle = true;
 let pointerMoveFuse = false;
 
 const coordsRegex = /^\(([0-9]+), ([0-9]+)\)$/;
@@ -53,6 +55,20 @@ let coordsMutationEnabled = false;
 const coordsMutationObserver = new MutationObserver(() => {
     processCoords();
 });
+
+const infoIconStates = [
+    { key: 'default', color: 'white', title: 'Idle' },
+    { key: 'disabled', color: 'gray', title: 'Disabled (click to enable)' },
+    { key: 'templateActive', color: 'green', title: 'Template active (click to disable)' },
+    { key: 'loadingTemplate', color: 'orange', title: 'Loading template' },
+    { key: 'error', color: 'red' },
+] as const satisfies InfoIconState[];
+const infoIconOptions: InfoIconOptions<typeof infoIconStates> = {
+    clickable: true,
+    states: infoIconStates,
+    statesTitlePrefix: '[Template color autoselector]',
+};
+let infoIcon: InfoIcon<typeof infoIconStates> | null = null;
 
 function initSettings(): void {
     createSettingsUI('Template color autoselector', () => [
@@ -91,7 +107,7 @@ function initBoardEventListeners(): void {
             debug('Pointer up');
             pointerDownCoords = null;
             pointerMoveFuse = false;
-            maybeEnableCoordsMutationObserver(true);
+            maybeEnableCoordsMutationObserver();
         },
         { passive: true },
     );
@@ -107,7 +123,7 @@ function initBoardEventListeners(): void {
             if (distance > 5) {
                 debug(`Pointer move fuse triggered at ${coords.x},${coords.y} distance ${distance}`);
                 pointerMoveFuse = true;
-                disableCoordsMutationObserver(true);
+                disableCoordsMutationObserver();
             }
         },
         { passive: true },
@@ -121,9 +137,9 @@ function initBodyEventListeners(): void {
                 return;
             }
 
-            hotkeyToggle = !hotkeyToggle;
-            debug(`Hotkey toggle: ${hotkeyToggle}`);
-            if (hotkeyToggle) {
+            manualToggle = !manualToggle;
+            debug('Toggle hotkey pressed');
+            if (manualToggle) {
                 maybeEnableCoordsMutationObserver();
             } else {
                 disableCoordsMutationObserver();
@@ -135,19 +151,29 @@ function initBodyEventListeners(): void {
 async function init(): Promise<void> {
     await waitForApp();
     palette = await getFastLookupPalette();
+    infoIcon = createInfoIcon(mdiEyedropper, infoIconOptions);
 
     debug('Initializing script');
 
     initSettings();
     initBoardEventListeners();
     initBodyEventListeners();
-    enableCoordsMutationObserver(true);
+    enableCoordsMutationObserver();
+
+    infoIcon.element.addEventListener('click', () => {
+        manualToggle = !manualToggle;
+        debug('Info icon clicked');
+        if (manualToggle) {
+            maybeEnableCoordsMutationObserver();
+        } else {
+            disableCoordsMutationObserver();
+        }
+    });
 
     window.addEventListener(TEMPLATE_CHANGE_EVENT_NAME, ({ detail: template }) => {
         if (template == null) {
             if (detemplatizedTemplate != null) {
                 clearTemplate();
-                showSuccessMessage('Template cleared');
             }
         } else {
             templateChanged(template);
@@ -162,7 +188,7 @@ async function init(): Promise<void> {
 }
 
 function processCoords(): void {
-    if (pointerMoveFuse || !hotkeyToggle) {
+    if (pointerMoveFuse || !manualToggle || !coordsMutationEnabled) {
         // disabled via any internal mechanism
         return;
     }
@@ -250,10 +276,13 @@ function coordsChanged(x: number, y: number): void {
 function clearTemplate(): void {
     detemplatizedTemplate = null;
     detemplatizedTemplateUint32View = null;
+
+    infoIcon?.setState('default');
 }
 
 function templateChanged(template: TemplateData): void {
     const width = template.width;
+    infoIcon?.setState('loadingTemplate');
 
     getTemplateImage()
         .then(async (imageData) => {
@@ -264,14 +293,19 @@ function templateChanged(template: TemplateData): void {
             debug('Template image detemplatized');
             detemplatizedTemplate = detemplatizedImageData;
             detemplatizedTemplateUint32View = new Uint32Array(detemplatizedImageData.data.buffer);
-            showSuccessMessage('Template loaded');
+            if (coordsMutationEnabled) {
+                infoIcon?.setState('templateActive');
+            } else {
+                infoIcon?.setState('disabled');
+            }
         })
         .catch((error: Error) => {
+            infoIcon?.setState('error');
             showErrorMessage(`Failed to load template image: ${error.message}`, error);
         });
 }
 
-function enableCoordsMutationObserver(silent = false): void {
+function enableCoordsMutationObserver(): void {
     if (coordsMutationEnabled) {
         // already enabled
         return;
@@ -280,13 +314,15 @@ function enableCoordsMutationObserver(silent = false): void {
     debug('Enabling coords mutation observer');
     coordsMutationObserver.observe(getPxlsUIMouseCoords(), { childList: true });
     coordsMutationEnabled = true;
-    processCoords();
-    if (!silent) {
-        showSuccessMessage('Enabled', 1000);
+    if (detemplatizedTemplate != null) {
+        infoIcon?.setState('templateActive');
+    } else {
+        infoIcon?.setState('default');
     }
+    processCoords();
 }
 
-function disableCoordsMutationObserver(silent = false): void {
+function disableCoordsMutationObserver(): void {
     if (!coordsMutationEnabled) {
         // already disabled
         return;
@@ -295,14 +331,12 @@ function disableCoordsMutationObserver(silent = false): void {
     debug('Disabling coords mutation observer');
     coordsMutationObserver.disconnect();
     coordsMutationEnabled = false;
-    if (!silent) {
-        showSuccessMessage('Disabled', 1000);
-    }
+    infoIcon?.setState('disabled');
 }
 
-function maybeEnableCoordsMutationObserver(silent = false): void {
-    if (hotkeyToggle && !pointerMoveFuse) {
-        enableCoordsMutationObserver(silent);
+function maybeEnableCoordsMutationObserver(): void {
+    if (manualToggle && !pointerMoveFuse) {
+        enableCoordsMutationObserver();
     }
 }
 
