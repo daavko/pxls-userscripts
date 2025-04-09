@@ -49,7 +49,7 @@ const lastKnownTemplateData: TemplateChangeData = {
     y: null,
 };
 
-const templateSrcChangeObserver = new MutationObserver((mutations) => {
+const templateMutationObserver = new MutationObserver((mutations) => {
     const srcMutation = mutations.find((mut) => {
         return mut.type === 'attributes' && mut.attributeName === 'src';
     });
@@ -64,6 +64,13 @@ const templateSrcChangeObserver = new MutationObserver((mutations) => {
                 changeTemplateDataProperty('src', currentSrc);
             }
         }
+    }
+
+    const classMutation = mutations.find((mut) => {
+        return mut.type === 'attributes' && mut.attributeName === 'class';
+    });
+    if (classMutation) {
+        runNumericTemplateParameterChanges();
     }
 });
 
@@ -118,6 +125,13 @@ function parseQueryParameterValue(value: string | null): number | null {
     }
 
     return parsedValue;
+}
+
+function runNumericTemplateParameterChanges(): void {
+    const app = getApp();
+    changeTemplateDataProperty('width', parseQueryParameterValue(app.query.get('tw') ?? null));
+    changeTemplateDataProperty('x', parseQueryParameterValue(app.query.get('ox') ?? null));
+    changeTemplateDataProperty('y', parseQueryParameterValue(app.query.get('oy') ?? null));
 }
 
 export function initTemplateEventHandlers(): void {
@@ -187,10 +201,10 @@ export function initTemplateEventHandlers(): void {
 
     const templateImage = getPxlsUITemplateImage();
     if (bindEvents) {
-        templateSrcChangeObserver.observe(templateImage, {
+        templateMutationObserver.observe(templateImage, {
             attributes: true,
             attributeOldValue: true,
-            attributeFilter: ['src'],
+            attributeFilter: ['src', 'class'],
         });
     }
 
@@ -199,10 +213,7 @@ export function initTemplateEventHandlers(): void {
         changeTemplateDataProperty('src', currentSrc);
     }
 
-    const app = getApp();
-    changeTemplateDataProperty('width', parseQueryParameterValue(app.query.get('tw') ?? null));
-    changeTemplateDataProperty('x', parseQueryParameterValue(app.query.get('ox') ?? null));
-    changeTemplateDataProperty('y', parseQueryParameterValue(app.query.get('oy') ?? null));
+    runNumericTemplateParameterChanges();
 
     dpusPxlsTemplate.eventsBound = true;
 }
