@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## Template color autoselector v2.2.0
+
+- Remove ResizeObserver on template image, as it was causing issues on initial load sometimes
+- Replace that with a class check on the existing MutationObserver, so we can still detect when the template image is
+  hidden via keyboard shortcut or settings
+- Add an icon to the bottom right corner, which allows you to see the current status of the script and toggle it on and
+  off with the mouse (this will also allow people on mobile to toggle it)
+
 ## Template color autoselector v2.1.0
 
 - Show keybinds in the settings menu
