@@ -18,6 +18,7 @@ export function debug(message: string, ...data: unknown[]): void {
 
 export interface DebugTimer {
     stop(): void;
+    mark(message: string): void;
 }
 
 export function debugTime(timerName: string): DebugTimer | null {
@@ -29,6 +30,9 @@ export function debugTime(timerName: string): DebugTimer | null {
         return {
             stop: (): void => {
                 console.timeEnd(fullTimingName);
+            },
+            mark: (msg): void => {
+                console.timeLog(fullTimingName, msg);
             },
         };
     } else {

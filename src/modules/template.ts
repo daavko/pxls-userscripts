@@ -1,12 +1,13 @@
 import { createSetDebugEnabledShim, createWorkerDebugShim } from '../util/worker';
 import { debug, debugEnabled, debugTime } from './debug';
-import { hashInWorker } from './hash';
+import { hash } from './hash';
 import { getDpus } from './pxls-init';
 import { getPxlsUITemplateImage } from './pxls-ui';
 
 declare global {
     interface DPUS {
         template: {
+            templateImageCache: Map<string, TemplateImage>;
             detemplatizeCache: Map<string, Promise<ImageData>>;
         };
     }
@@ -15,47 +16,27 @@ declare global {
 function getDpusTemplate(): DPUS['template'] {
     const dpus = getDpus();
     dpus.template ??= {
+        templateImageCache: new Map(),
         detemplatizeCache: new Map(),
     };
     return dpus.template;
 }
 
-export interface TemplateImage {
-    url: string;
-    imageData: ImageData;
-}
-
-export async function getTemplateImage(): Promise<TemplateImage> {
-    const debugTimer = debugTime('getTemplateImage');
-
-    const img = getPxlsUITemplateImage();
-    await img.decode();
-
-    const { naturalWidth: imgWidth, naturalHeight: imgHeight } = img;
-    debug(`Template image size: ${imgWidth}x${imgHeight}`);
-
-    if (imgWidth <= 0 || imgHeight <= 0) {
-        debugTimer?.stop();
-        throw new Error('Template image has invalid size after decoding, this should never happen');
-    }
-
-    const imgCanvas = new OffscreenCanvas(imgWidth, imgHeight);
-    const ctx = imgCanvas.getContext('2d');
-    if (!ctx) {
-        debugTimer?.stop();
-        throw new Error('Failed to get 2D context for template image canvas');
-    }
-    ctx.drawImage(img, 0, 0);
-    const imageData = ctx.getImageData(0, 0, imgWidth, imgHeight);
-
-    debugTimer?.stop();
-    return {
-        url: img.src,
-        imageData,
-    };
-}
-
+const TEMPLATE_IMAGE_CACHE_SIZE = 10;
 const DETEMPLATIZE_CACHE_SIZE = 10;
+
+function addToTemplateImageCache(key: string, image: TemplateImage): void {
+    const cache = getDpusTemplate().templateImageCache;
+    while (cache.size >= TEMPLATE_IMAGE_CACHE_SIZE) {
+        const firstKey = cache.keys().next().value!;
+        cache.delete(firstKey);
+    }
+    cache.set(key, image);
+}
+
+function getFromTemplateImageCache(key: string): TemplateImage | undefined {
+    return getDpusTemplate().templateImageCache.get(key);
+}
 
 function createDetemplatizeCacheKey(key: string, targetWidth: number): string {
     return `${key}-${targetWidth}`;
@@ -72,6 +53,50 @@ function addToDetemplatizeCache(key: string, targetWidth: number, image: Promise
 
 function getFromDetemplatizeCache(key: string, targetWidth: number): Promise<ImageData> | undefined {
     return getDpusTemplate().detemplatizeCache.get(createDetemplatizeCacheKey(key, targetWidth));
+}
+
+export interface TemplateImage {
+    url: string;
+    imageData: ImageData;
+}
+
+export async function getTemplateImage(): Promise<TemplateImage> {
+    const debugTimer = debugTime('getTemplateImage');
+
+    const img = getPxlsUITemplateImage();
+    const cachedImage = getFromTemplateImageCache(img.src);
+    if (cachedImage) {
+        debug('Using cached template image', img.src);
+        debugTimer?.stop();
+        return cachedImage;
+    }
+
+    await img.decode();
+
+    const { naturalWidth: imgWidth, naturalHeight: imgHeight } = img;
+    debug(`Template image size: ${imgWidth}x${imgHeight}`);
+
+    if (imgWidth <= 0 || imgHeight <= 0) {
+        debugTimer?.stop();
+        throw new Error('Template image has invalid size after decoding, this should never happen');
+    }
+
+    const imgCanvas = new OffscreenCanvas(imgWidth, imgHeight);
+    const ctx = imgCanvas.getContext('2d');
+    if (!ctx) {
+        throw new Error('Failed to get 2D context for template image canvas');
+    }
+    ctx.drawImage(img, 0, 0);
+    const imageData = ctx.getImageData(0, 0, imgWidth, imgHeight);
+
+    const templateImage: TemplateImage = {
+        url: img.src,
+        imageData,
+    };
+    addToTemplateImageCache(img.src, templateImage);
+
+    debugTimer?.stop();
+    return templateImage;
 }
 
 const DETEMPLATIZE_WORKER_SCRIPT = `
@@ -112,6 +137,7 @@ export async function detemplatizeImageWorker(template: TemplateImage, targetWid
         return template.imageData;
     }
 
+    let imageHash: string | undefined;
     if (template.url.startsWith('data:')) {
         // data URLs are cacheable directly without hashing, since they are already unique
         const cachedImage = getFromDetemplatizeCache(template.url, targetWidth);
@@ -119,13 +145,13 @@ export async function detemplatizeImageWorker(template: TemplateImage, targetWid
             debug('Using cached image for data URL', template.url);
             return cachedImage;
         }
-    }
-
-    const imageHash = await hashInWorker(template.imageData.data);
-    const cachedImage = getFromDetemplatizeCache(imageHash, targetWidth);
-    if (cachedImage) {
-        debug(`Using cached image for hash ${imageHash}`);
-        return cachedImage;
+    } else {
+        imageHash = await hash(template.imageData.data);
+        const cachedImage = getFromDetemplatizeCache(imageHash, targetWidth);
+        if (cachedImage) {
+            debug(`Using cached image for hash ${imageHash}`);
+            return cachedImage;
+        }
     }
 
     const debugTimer = debugTime('detemplatizeImageWorker');
@@ -161,7 +187,7 @@ export async function detemplatizeImageWorker(template: TemplateImage, targetWid
     if (template.url.startsWith('data:')) {
         addToDetemplatizeCache(template.url, targetWidth, resultPromise);
     } else {
-        addToDetemplatizeCache(imageHash, targetWidth, resultPromise);
+        addToDetemplatizeCache(imageHash!, targetWidth, resultPromise);
     }
     return resultPromise;
 }
