@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Milestone watcher v1.0.0
+
+- Initial release of the Milestone watcher script
+
 ## Template color autoselector v2.3.0
 
 - Internal refactor in settings
