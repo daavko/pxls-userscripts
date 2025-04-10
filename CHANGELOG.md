@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Template color autoselector v2.3.1
+
+- Fix detemplatize process would not work for unstyled templates
+
 ## Milestone watcher v1.1.0
 
 - Add a setting to watch every 1000 canvas and all-time pixels (useful for updating egos)
