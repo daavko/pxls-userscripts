@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## Template color autoselector v2.3.0
+
+- Internal refactor in settings
+- Replace Zod with Valibot to reduce bundle size by more than half
+
 ## Template color autoselector v2.2.0
 
 - Remove ResizeObserver on template image, as it was causing issues on initial load sometimes
