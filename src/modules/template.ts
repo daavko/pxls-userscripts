@@ -90,6 +90,11 @@ interface DetemplatizeWorkerSuccessResult {
 type DetemplatizeWorkerResult = DetemplatizeWorkerErrorResult | DetemplatizeWorkerSuccessResult;
 
 export async function detemplatizeImageWorker(template: TemplateImage, targetWidth: number): Promise<ImageData> {
+    if (template.imageData.width === targetWidth || targetWidth === -1) {
+        // no need to detemplatize if the image is already the right size
+        return template.imageData;
+    }
+
     if (template.url.startsWith('data:')) {
         // data URLs are cacheable directly without hashing, since they are already unique
         const cachedImage = getFromDetemplatizeCache(template.url, targetWidth);
