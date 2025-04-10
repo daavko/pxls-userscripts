@@ -19,6 +19,11 @@ encounter any issues, please create an issue on this GitHub repository or find m
 This script automatically selects the color of the pixel you are currently hovering over, based on the loaded template.
 There's various options in the settings menu to customize the behavior of the script.
 
+### Milestone watcher
+
+This script checks the amount of pixels you have placed (on current canvas and overall), and notifies you when you reach
+a milestone. You can customize the milestones in the settings menu.
+
 ## License
 
 All scripts in this repository are licensed under the GPLv3 license or any later version. You can find the full license
