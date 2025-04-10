@@ -1,7 +1,24 @@
 import { createSetDebugEnabledShim, createWorkerDebugShim } from '../util/worker';
 import { debug, debugEnabled, debugTime } from './debug';
 import { hashInWorker } from './hash';
+import { getDpus } from './pxls-init';
 import { getPxlsUITemplateImage } from './pxls-ui';
+
+declare global {
+    interface DPUS {
+        template: {
+            detemplatizeCache: Map<string, Promise<ImageData>>;
+        };
+    }
+}
+
+function getDpusTemplate(): DPUS['template'] {
+    const dpus = getDpus();
+    dpus.template ??= {
+        detemplatizeCache: new Map(),
+    };
+    return dpus.template;
+}
 
 export interface TemplateImage {
     url: string;
@@ -39,22 +56,22 @@ export async function getTemplateImage(): Promise<TemplateImage> {
 }
 
 const DETEMPLATIZE_CACHE_SIZE = 10;
-const DETEMPLATIZE_CACHE = new Map<string, ImageData>();
 
 function createDetemplatizeCacheKey(key: string, targetWidth: number): string {
     return `${key}-${targetWidth}`;
 }
 
-function addToDetemplatizeCache(key: string, targetWidth: number, image: ImageData): void {
-    while (DETEMPLATIZE_CACHE.size >= DETEMPLATIZE_CACHE_SIZE) {
-        const firstKey = DETEMPLATIZE_CACHE.keys().next().value!;
-        DETEMPLATIZE_CACHE.delete(firstKey);
+function addToDetemplatizeCache(key: string, targetWidth: number, image: Promise<ImageData>): void {
+    const cache = getDpusTemplate().detemplatizeCache;
+    while (cache.size >= DETEMPLATIZE_CACHE_SIZE) {
+        const firstKey = cache.keys().next().value!;
+        cache.delete(firstKey);
     }
-    DETEMPLATIZE_CACHE.set(createDetemplatizeCacheKey(key, targetWidth), image);
+    cache.set(createDetemplatizeCacheKey(key, targetWidth), image);
 }
 
-function getFromDetemplatizeCache(key: string, targetWidth: number): ImageData | undefined {
-    return DETEMPLATIZE_CACHE.get(createDetemplatizeCacheKey(key, targetWidth));
+function getFromDetemplatizeCache(key: string, targetWidth: number): Promise<ImageData> | undefined {
+    return getDpusTemplate().detemplatizeCache.get(createDetemplatizeCacheKey(key, targetWidth));
 }
 
 const DETEMPLATIZE_WORKER_SCRIPT = `
@@ -140,13 +157,12 @@ export async function detemplatizeImageWorker(template: TemplateImage, targetWid
         URL.revokeObjectURL(workerObjectURL);
         debugTimer?.stop();
     });
-    void resultPromise.then((result) => {
-        if (template.url.startsWith('data:')) {
-            addToDetemplatizeCache(template.url, targetWidth, result);
-        } else {
-            addToDetemplatizeCache(imageHash, targetWidth, result);
-        }
-    });
+
+    if (template.url.startsWith('data:')) {
+        addToDetemplatizeCache(template.url, targetWidth, resultPromise);
+    } else {
+        addToDetemplatizeCache(imageHash, targetWidth, resultPromise);
+    }
     return resultPromise;
 }
 
