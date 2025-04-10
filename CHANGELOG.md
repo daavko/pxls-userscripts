@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Milestone watcher v1.1.0
+
+- Add a setting to watch every 1000 canvas and all-time pixels (useful for updating egos)
+
 ## Milestone watcher v1.0.0
 
 - Initial release of the Milestone watcher script
