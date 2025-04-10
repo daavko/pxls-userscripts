@@ -4,6 +4,7 @@ import { debug, setDebugName } from '../modules/debug';
 import { setMessagePrefix, showErrorMessage, showInfoMessage } from '../modules/message';
 import { getApp, globalInit, waitForApp } from '../modules/pxls-init';
 import {
+    booleanSerializer,
     createScriptSettings,
     getGlobalSettings,
     initGlobalSettings,
@@ -58,16 +59,22 @@ const settingsSchema = v.partial(
     v.object({
         currentCanvasMilestones: rawMilestoneSchema,
         allTimeMilestones: rawMilestoneSchema,
+        watchCanvasThousands: v.boolean(),
+        watchAllTimeThousands: v.boolean(),
     }),
 );
 type SettingsType = NonNullableKeys<InferOutput<typeof settingsSchema>>;
 const settingsDefault: SettingsType = {
     currentCanvasMilestones: '69,420,727,1337,10000',
     allTimeMilestones: '727727',
+    watchCanvasThousands: false,
+    watchAllTimeThousands: false,
 };
 const settingsValueSerializerMap: ValueSerializerMap<SettingsType> = {
     currentCanvasMilestones: stringSerializer,
     allTimeMilestones: stringSerializer,
+    watchCanvasThousands: booleanSerializer,
+    watchAllTimeThousands: booleanSerializer,
 };
 const settings = createScriptSettings(
     'dpus_milestoneWatcher_settings',
@@ -81,6 +88,8 @@ function initSettings(): void {
         createBooleanSetting(getGlobalSettings(), 'debug', 'Debug logging'),
         createStringSetting(settings, 'currentCanvasMilestones', 'Current canvas milestones (comma-separated)'),
         createStringSetting(settings, 'allTimeMilestones', 'All-time milestones (comma-separated)'),
+        createBooleanSetting(settings, 'watchCanvasThousands', 'Notify every 1000 pixels on current canvas'),
+        createBooleanSetting(settings, 'watchAllTimeThousands', 'Notify every 1000 all-time pixels'),
     ]);
 }
 
@@ -99,6 +108,14 @@ function initPixelCountListener(): void {
 
         if (allTimeMilestone != null) {
             showInfoMessage(`You have reached an all-time milestone: ${allTimeMilestone}`, 7000);
+        }
+
+        if (settings.get('watchCanvasThousands') && currentCanvasCount % 1000 === 0) {
+            showInfoMessage(`You have reached ${currentCanvasCount} pixels on the current canvas!`, 7000);
+        }
+
+        if (settings.get('watchAllTimeThousands') && allTimeCount % 1000 === 0) {
+            showInfoMessage(`You have reached ${allTimeCount} all-time pixels!`, 7000);
         }
     });
 }
