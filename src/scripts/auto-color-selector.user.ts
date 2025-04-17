@@ -14,7 +14,6 @@ import {
     createKeyboardShortcutText,
     createLineBreak,
     createSettingsResetButton,
-    createSettingsText,
     createSettingsUI,
     createSubheading,
 } from '../modules/settings-ui';
@@ -83,9 +82,6 @@ function initSettings(): void {
             'Select color when deselected inside template',
         ),
         createSettingsResetButton(),
-        createSettingsText(
-            'Changes are applied immediately. If you have multiple tabs open, you will need to reload the other tabs when you change an option. Resetting options requires you to reload all open Pxls tabs.',
-        ),
     ]);
 }
 
