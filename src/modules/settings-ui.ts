@@ -89,6 +89,9 @@ export function createBooleanSetting<T extends Record<string, unknown>>(
     checkbox.addEventListener('change', () => {
         settings._setBoolean(optionKey, checkbox.checked);
     });
+    settings.addCallback(optionKey, () => {
+        checkbox.checked = settings._getBoolean(optionKey);
+    });
     return optionHtml;
 }
 
@@ -126,6 +129,9 @@ export function createNumberOption<T extends Record<string, unknown>>(
         }
         settings._setNumber(optionKey, value);
     });
+    settings.addCallback(optionKey, () => {
+        input.value = settings._getString(optionKey).toString();
+    });
     return optionHtml;
 }
 
@@ -146,6 +152,9 @@ export function createStringSetting<T extends Record<string, unknown>>(
     const input: HTMLInputElement = optionHtml.querySelector(`input#${id}`)!;
     input.addEventListener('change', () => {
         settings._setString(optionKey, input.value);
+    });
+    settings.addCallback(optionKey, () => {
+        input.value = settings._getString(optionKey);
     });
     return optionHtml;
 }
@@ -174,6 +183,9 @@ export function createSelectSetting<T extends Record<string, unknown>>(
     select.value = settings._getString(optionKey);
     select.addEventListener('change', () => {
         settings._setString(optionKey, select.value);
+    });
+    settings.addCallback(optionKey, () => {
+        select.value = settings._getString(optionKey);
     });
     return optionHtml;
 }

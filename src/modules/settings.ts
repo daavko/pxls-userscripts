@@ -4,6 +4,15 @@ import type { NonNullableKeys } from '../util/types';
 import { showErrorMessage } from './message';
 import { getScriptId } from './pxls-init';
 
+const SETTINGS_SYNC_CHANNEL_NAME = 'dpus:settings:sync';
+
+const settingsSyncMessageSchema = v.object({
+    type: v.literal('settingsSync'),
+    storageKey: v.string(),
+    newValue: v.unknown(),
+});
+type SettingsSyncMessage = InferOutput<typeof settingsSyncMessageSchema>;
+
 export type BooleanOption<T extends Record<string, unknown>, K extends keyof T> = T[K] extends boolean ? T[K] : never;
 export type NumberOption<T extends Record<string, unknown>, K extends keyof T> = T[K] extends number ? T[K] : never;
 export type StringOption<T extends Record<string, unknown>, K extends keyof T> = T[K] extends string ? T[K] : never;
@@ -19,22 +28,60 @@ export type StringOptionKeys<T extends Record<string, unknown>> = {
 }[keyof T];
 
 export type OptionValueUpdateCallbackMap<T extends Record<string, unknown>> = {
-    [K in keyof T]: (oldValue: T[K], newValue: T[K]) => void;
+    [K in keyof T]?: ((oldValue: T[K], newValue: T[K]) => void)[];
 };
 
 export class Settings<const TSettings extends Record<string, unknown>> {
+    private currentValue: TSettings;
+
+    private readonly optionValueUpdateCallbacks: Partial<OptionValueUpdateCallbackMap<TSettings>>;
+
+    private readonly syncChannel = new BroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME);
+
     constructor(
         private readonly storageKey: string,
         private readonly schema: GenericSchema<unknown, Partial<TSettings>>,
         private readonly defaultValue: TSettings,
-        private readonly optionValueUpdateCallbacks: Partial<OptionValueUpdateCallbackMap<TSettings>> = {},
+        private readonly defaultCallbacks: Partial<OptionValueUpdateCallbackMap<TSettings>> = {},
     ) {
-        this.init();
+        this.currentValue = this.init();
+
+        this.optionValueUpdateCallbacks = defaultCallbacks;
+
+        this.syncChannel.addEventListener('message', (event) => {
+            const parsedMessage = v.safeParse(settingsSyncMessageSchema, event.data);
+
+            if (!parsedMessage.success) {
+                return;
+            }
+
+            const { type, storageKey: messageStorageKey, newValue: newValueRaw } = parsedMessage.output;
+
+            const parsedNewValue = v.safeParse(this.schema, newValueRaw);
+            if (!parsedNewValue.success) {
+                return;
+            }
+
+            const newValue = { ...this.defaultValue, ...parsedNewValue.output };
+            if (type === 'settingsSync' && messageStorageKey === this.storageKey) {
+                const previousValue = this.currentValue;
+                this.currentValue = newValue;
+                for (const [key, value] of Object.entries(this.currentValue)) {
+                    const callbacks = this.optionValueUpdateCallbacks[key as keyof TSettings];
+                    const oldValue = previousValue[key as keyof TSettings];
+                    if (callbacks != null) {
+                        for (const callback of callbacks) {
+                            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
+                            callback(oldValue, value as TSettings[typeof key]);
+                        }
+                    }
+                }
+            }
+        });
     }
 
     get<K extends keyof TSettings>(option: K): TSettings[K] {
-        const storedValue = this.loadFullStoredValue();
-        return storedValue[option];
+        return this.currentValue[option];
     }
 
     set<K extends keyof TSettings>(option: K, value: TSettings[K]): void {
@@ -42,9 +89,33 @@ export class Settings<const TSettings extends Record<string, unknown>> {
         const oldSettingValue = storedValue[option];
         const newValue = { ...storedValue, [option]: value };
         this.saveStoredValue(newValue);
-        const callback = this.optionValueUpdateCallbacks[option];
-        if (callback) {
+        this.currentValue = newValue;
+        const callbacks = this.optionValueUpdateCallbacks[option];
+        for (const callback of callbacks ?? []) {
             callback(oldSettingValue, value);
+        }
+    }
+
+    addCallback<K extends keyof TSettings>(
+        option: K,
+        callback: (oldValue: TSettings[K], newValue: TSettings[K]) => void,
+    ): void {
+        const callbacks = this.optionValueUpdateCallbacks[option] ?? [];
+        callbacks.push(callback);
+        this.optionValueUpdateCallbacks[option] = callbacks;
+    }
+
+    removeCallback<K extends keyof TSettings>(
+        option: K,
+        callback: (oldValue: TSettings[K], newValue: TSettings[K]) => void,
+    ): void {
+        const callbacks = this.optionValueUpdateCallbacks[option];
+        if (callbacks == null) {
+            return;
+        }
+        const index = callbacks.indexOf(callback);
+        if (index !== -1) {
+            callbacks.splice(index, 1);
         }
     }
 
@@ -82,9 +153,11 @@ export class Settings<const TSettings extends Record<string, unknown>> {
         this.saveStoredValue(this.defaultValue);
     }
 
-    private init(): void {
+    private init(): TSettings {
         const storedValue = this.loadStoredValue();
-        this.saveStoredValue({ ...this.defaultValue, ...storedValue });
+        const resolvedValue = { ...this.defaultValue, ...storedValue };
+        this.saveStoredValue(resolvedValue);
+        return resolvedValue;
     }
 
     private loadFullStoredValue(): TSettings {
@@ -127,6 +200,11 @@ export class Settings<const TSettings extends Record<string, unknown>> {
             storedValue[key] = value;
         }
         localStorage.setItem(this.storageKey, JSON.stringify(storedValue));
+        this.syncChannel.postMessage({
+            type: 'settingsSync',
+            storageKey: this.storageKey,
+            newValue: storedValue,
+        } satisfies SettingsSyncMessage);
     }
 }
 
