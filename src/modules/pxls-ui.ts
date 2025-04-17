@@ -1,4 +1,6 @@
 let PXLS_UI_BOARD: HTMLCanvasElement | null = null;
+let PXLS_UI_BOARD_CONTAINER: HTMLElement | null = null;
+let PXLS_UI_VIRGINMAP_BOARD: HTMLCanvasElement | null = null;
 let PXLS_UI_TEMPLATE_IMAGE: HTMLImageElement | null = null;
 let PXLS_UI_MOUSE_COORDS: HTMLElement | null = null;
 let PXLS_UI_PALETTE_DESELECT_BUTTON: HTMLElement | null = null;
@@ -18,6 +20,14 @@ function getPxlsUIElement<T extends Element | Element[]>(getter: () => T | null,
 
 export function getPxlsUIBoard(): HTMLCanvasElement {
     return getPxlsUIElement(() => PXLS_UI_BOARD, 'PXLS_UI_BOARD');
+}
+
+export function getPxlsUIBoardContainer(): HTMLElement {
+    return getPxlsUIElement(() => PXLS_UI_BOARD_CONTAINER, 'PXLS_UI_BOARD_CONTAINER');
+}
+
+export function getPxlsUIVirginmapBoard(): HTMLCanvasElement {
+    return getPxlsUIElement(() => PXLS_UI_VIRGINMAP_BOARD, 'PXLS_UI_VIRGINMAP_BOARD');
 }
 
 export function getPxlsUITemplateImage(): HTMLImageElement {
@@ -56,6 +66,16 @@ export function findUIElements(): void {
     PXLS_UI_BOARD = document.querySelector('canvas#board');
     if (!PXLS_UI_BOARD) {
         throw new Error('Failed to find board canvas, this should never happen');
+    }
+
+    PXLS_UI_BOARD_CONTAINER = document.querySelector('#board-mover');
+    if (!PXLS_UI_BOARD_CONTAINER) {
+        throw new Error('Failed to find board container, this should never happen');
+    }
+
+    PXLS_UI_VIRGINMAP_BOARD = document.querySelector('canvas#virginmap');
+    if (!PXLS_UI_VIRGINMAP_BOARD) {
+        throw new Error('Failed to find virginmap canvas, this should never happen');
     }
 
     PXLS_UI_TEMPLATE_IMAGE = document.querySelector('img.board-template');
