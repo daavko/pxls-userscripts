@@ -4,7 +4,7 @@ import { getPxlsUITopUI } from './pxls-ui';
 
 let INFO_ICONS_CONTAINER: Element | null = null;
 
-export type InfoIconColor = 'white' | 'gray' | 'green' | 'red' | 'orange';
+export type InfoIconColor = 'white' | 'gray' | 'green' | 'red' | 'orange' | 'yellow';
 
 export interface InfoIconOptions<T extends InfoIconState[]> {
     clickable: boolean;
@@ -94,7 +94,7 @@ export function getOrInitInfoIconsContainer(): Element {
         return INFO_ICONS_CONTAINER;
     }
 
-    const existingInfoIconContainer = document.querySelector('.dpus__info-icon-container');
+    const existingInfoIconContainer = document.querySelector('.dpus__info-icons');
     if (existingInfoIconContainer) {
         INFO_ICONS_CONTAINER = existingInfoIconContainer;
     } else {
