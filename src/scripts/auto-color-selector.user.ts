@@ -37,7 +37,6 @@ const settingsDefault: SettingsType = {
 };
 const settings = createScriptSettings(settingsSchema, settingsDefault);
 
-// string[] with hex color values
 let palette: number[] = [];
 
 let detemplatizedTemplate: ImageData | null = null;
@@ -307,7 +306,6 @@ function templateChanged(template: TemplateData): void {
 
 function enableCoordsMutationObserver(): void {
     if (coordsMutationEnabled) {
-        // already enabled
         return;
     }
 
@@ -324,7 +322,6 @@ function enableCoordsMutationObserver(): void {
 
 function disableCoordsMutationObserver(): void {
     if (!coordsMutationEnabled) {
-        // already disabled
         return;
     }
 
