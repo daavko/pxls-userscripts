@@ -24,6 +24,16 @@ There's various options in the settings menu to customize the behavior of the sc
 This script checks the amount of pixels you have placed (on current canvas and overall), and notifies you when you reach
 a milestone. You can customize the milestones in the settings menu.
 
+### Grief tracker
+
+This script highlights griefed pixels with a configurable highlight.
+
+**Warning: This script is not recommended for use in Google Chrome with very large templates. For whatever reason, when
+the grief view is active, Chrome completely recalculates the entire board view when a pixel is changed, including
+decoding the template image from scratch even though it hasn't changed. This causes the whole tab to freeze for that
+time (I've personally observed freezes of around 250ms with a ~7500x8500 template image on a very strong desktop).**
+Smaller templates are fine, since they don't take as long to decode.
+
 ## License
 
 All scripts in this repository are licensed under the GPLv3 license or any later version. You can find the full license
