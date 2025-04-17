@@ -61,19 +61,20 @@ export interface TemplateImage {
 }
 
 export async function getTemplateImage(): Promise<TemplateImage> {
-    const debugTimer = debugTime('getTemplateImage');
-
     const img = getPxlsUITemplateImage();
     const cachedImage = getFromTemplateImageCache(img.src);
     if (cachedImage) {
         debug('Using cached template image', img.src);
-        debugTimer?.stop();
         return cachedImage;
     }
 
+    const debugTimer = debugTime('getTemplateImage');
+
     await img.decode();
 
-    const { naturalWidth: imgWidth, naturalHeight: imgHeight } = img;
+    const imageBitmap = await createImageBitmap(img);
+
+    const { width: imgWidth, height: imgHeight } = imageBitmap;
     debug(`Template image size: ${imgWidth}x${imgHeight}`);
 
     if (imgWidth <= 0 || imgHeight <= 0) {
@@ -86,7 +87,7 @@ export async function getTemplateImage(): Promise<TemplateImage> {
     if (!ctx) {
         throw new Error('Failed to get 2D context for template image canvas');
     }
-    ctx.drawImage(img, 0, 0);
+    ctx.drawImage(imageBitmap, 0, 0);
     const imageData = ctx.getImageData(0, 0, imgWidth, imgHeight);
 
     const templateImage: TemplateImage = {
