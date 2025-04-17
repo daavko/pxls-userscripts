@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## Milestone watcher v1.2.0
+
+- Internal optimizations
+- Settings now sync across open tabs
+- Add settings reset button
+
 ## Template color autoselector v2.3.1
 
 - Fix detemplatize process would not work for unstyled templates
