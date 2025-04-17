@@ -1,23 +1,14 @@
 import type { InferOutput } from 'valibot';
 import * as v from 'valibot';
-import { debug, setDebugName } from '../modules/debug';
-import { setMessagePrefix, showErrorMessage, showInfoMessage } from '../modules/message';
+import { debug } from '../modules/debug';
+import { showErrorMessage, showInfoMessage } from '../modules/message';
 import { getApp, globalInit, waitForApp } from '../modules/pxls-init';
-import {
-    booleanSerializer,
-    createScriptSettings,
-    getGlobalSettings,
-    initGlobalSettings,
-    stringSerializer,
-    type ValueSerializerMap,
-} from '../modules/settings';
+import { createScriptSettings, getGlobalSettings, initGlobalSettings } from '../modules/settings';
 import { createBooleanSetting, createSettingsUI, createStringSetting } from '../modules/settings-ui';
 import type { NonNullableKeys } from '../util/types';
 
-globalInit();
-setDebugName('Milestone watcher');
-setMessagePrefix('Milestone watcher');
-initGlobalSettings('dpus_milestoneWatcher_globalSettings');
+globalInit({ scriptId: 'milestoneWatcher', scriptName: 'Milestone watcher' });
+initGlobalSettings();
 
 const milestoneSchema = v.pipe(
     v.string(),
@@ -70,21 +61,10 @@ const settingsDefault: SettingsType = {
     watchCanvasThousands: false,
     watchAllTimeThousands: false,
 };
-const settingsValueSerializerMap: ValueSerializerMap<SettingsType> = {
-    currentCanvasMilestones: stringSerializer,
-    allTimeMilestones: stringSerializer,
-    watchCanvasThousands: booleanSerializer,
-    watchAllTimeThousands: booleanSerializer,
-};
-const settings = createScriptSettings(
-    'dpus_milestoneWatcher_settings',
-    settingsSchema,
-    settingsDefault,
-    settingsValueSerializerMap,
-);
+const settings = createScriptSettings(settingsSchema, settingsDefault);
 
 function initSettings(): void {
-    createSettingsUI('Milestone watcher', () => [
+    createSettingsUI(() => [
         createBooleanSetting(getGlobalSettings(), 'debug', 'Debug logging'),
         createStringSetting(settings, 'currentCanvasMilestones', 'Current canvas milestones (comma-separated)'),
         createStringSetting(settings, 'allTimeMilestones', 'All-time milestones (comma-separated)'),

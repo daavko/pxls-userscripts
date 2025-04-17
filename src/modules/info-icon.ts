@@ -1,5 +1,6 @@
 import { addStylesheet, createDocumentFragment } from './document';
 import infoIconStyle from './info-icon.css';
+import { getScriptName } from './pxls-init';
 import { getPxlsUITopUI } from './pxls-ui';
 
 let INFO_ICONS_CONTAINER: Element | null = null;
@@ -9,14 +10,12 @@ export type InfoIconColor = 'white' | 'gray' | 'green' | 'red' | 'orange' | 'yel
 export interface InfoIconOptions<T extends InfoIconState[]> {
     clickable: boolean;
     states: T;
-    statesTitlePrefix: string;
 }
 
 const DEFAULT_INFO_ICON_STATES = [{ key: 'default', color: 'white' }] as const satisfies InfoIconState[];
 const DEFAULT_INFO_ICON_OPTIONS: InfoIconOptions<typeof DEFAULT_INFO_ICON_STATES> = {
     clickable: false,
     states: DEFAULT_INFO_ICON_STATES,
-    statesTitlePrefix: '',
 };
 
 export interface InfoIconState<T extends string = string> {
@@ -28,7 +27,6 @@ export interface InfoIconState<T extends string = string> {
 export class InfoIcon<const T extends InfoIconState[]> {
     private readonly states: InfoIconState[];
     private activeState: InfoIconState | null = null;
-    private readonly statesTitlePrefix: string;
 
     constructor(
         readonly element: Element,
@@ -47,7 +45,6 @@ export class InfoIcon<const T extends InfoIconState[]> {
             throw new Error('No states provided');
         }
 
-        this.statesTitlePrefix = optionsWithDefaults.statesTitlePrefix;
         this.setState(this.states[0].key);
     }
 
@@ -63,7 +60,7 @@ export class InfoIcon<const T extends InfoIconState[]> {
         this.element.classList.add(this.classNameFromState(newState.color));
         this.activeState = newState;
         if (newState.title != null) {
-            this.element.setAttribute('title', `${this.statesTitlePrefix} ${newState.title}`.trim());
+            this.element.setAttribute('title', `[${getScriptName()}] ${newState.title}`.trim());
         } else {
             this.element.removeAttribute('title');
         }

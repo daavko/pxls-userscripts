@@ -1,9 +1,8 @@
+import { getScriptName } from './pxls-init';
 import { getGlobalSettings } from './settings';
 
-let DEBUG_NAME = '[missing name]';
-
-export function setDebugName(name: string): void {
-    DEBUG_NAME = `[${name}]`;
+function debugName(): string {
+    return `[${getScriptName()}]`;
 }
 
 export function debugEnabled(): boolean {
@@ -12,7 +11,7 @@ export function debugEnabled(): boolean {
 
 export function debug(message: string, ...data: unknown[]): void {
     if (debugEnabled()) {
-        console.debug(DEBUG_NAME, message, ...data);
+        console.debug(debugName(), message, ...data);
     }
 }
 
@@ -23,7 +22,7 @@ export interface DebugTimer {
 
 export function debugTime(timerName: string): DebugTimer | null {
     const timerNameWithId = `${timerName} (${window.crypto.randomUUID()})`;
-    const fullTimingName = `${DEBUG_NAME} ${timerNameWithId}`;
+    const fullTimingName = `${debugName()} ${timerNameWithId}`;
     if (debugEnabled()) {
         debug(`${timerNameWithId} timer started`);
         console.time(fullTimingName);

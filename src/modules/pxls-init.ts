@@ -11,12 +11,45 @@ declare global {
         dpus?: Partial<DPUS>;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- intended to be extended
-    interface DPUS {}
+    interface DPUS {
+        global: {
+            scripts: string[];
+        };
+    }
 }
 
-export function globalInit(): void {
-    window.dpus ??= {};
+export interface ScriptInitParams {
+    scriptId: string;
+    scriptName: string;
+}
+
+let SCRIPT_ID: string | null = null;
+let SCRIPT_NAME: string | null = null;
+
+export function getScriptId(): string {
+    if (SCRIPT_ID === null) {
+        throw new Error('Script ID is not set. Call globalInit() first.');
+    }
+    return SCRIPT_ID;
+}
+
+export function getScriptName(): string {
+    if (SCRIPT_NAME === null) {
+        throw new Error('Script name is not set. Call globalInit() first.');
+    }
+    return SCRIPT_NAME;
+}
+
+export function globalInit(initParams: ScriptInitParams): void {
+    const { scriptId, scriptName } = initParams;
+    const dpusGlobal = getDpusGlobal();
+    if (!dpusGlobal.scripts.includes(scriptId)) {
+        dpusGlobal.scripts.push(scriptId);
+    } else {
+        throw new Error(`Script ${scriptId} already initialized`);
+    }
+    SCRIPT_ID = scriptId;
+    SCRIPT_NAME = scriptName;
 }
 
 export async function waitForApp(checkInterval = 1000): Promise<PxlsApp> {
@@ -67,6 +100,14 @@ export function getApp(): PxlsApp {
 export function getDpus(): Partial<DPUS> {
     window.dpus ??= {};
     return window.dpus;
+}
+
+export function getDpusGlobal(): DPUS['global'] {
+    const dpus = getDpus();
+    dpus.global ??= {
+        scripts: [],
+    };
+    return dpus.global;
 }
 
 async function waitForLogin(): Promise<void> {

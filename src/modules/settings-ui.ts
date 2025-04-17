@@ -1,17 +1,49 @@
-import { createDocumentFragment, createRandomElementId } from './document';
-import { type BooleanOptionKeys, getGlobalSettings, Settings, type StringOptionKeys } from './settings';
+import { addStylesheet, createDocumentFragment, createRandomElementId } from './document';
+import { showErrorMessage } from './message';
+import { getDpusGlobal, getScriptId, getScriptName } from './pxls-init';
+import {
+    type BooleanOptionKeys,
+    getGlobalSettings,
+    type NumberOptionKeys,
+    Settings,
+    type StringOptionKeys,
+} from './settings';
+import settingsUiStyle from './settings-ui.css';
 
-export function createSettingsUI(headerTitle: string, bodyCreationFn: () => DocumentFragment[]): void {
+function getOrCreateSettingsContainer(): Element {
+    const settingsContainer = document.querySelector('aside#settings .dpus__settings-ui');
+
+    if (settingsContainer) {
+        return settingsContainer;
+    } else {
+        return createSettingsContainer();
+    }
+}
+
+function createSettingsContainer(): Element {
     const optionsSidebar = document.querySelector('aside#settings > .panel-body');
     if (!optionsSidebar) {
         throw new Error('Failed to find settings sidebar');
     }
 
+    addStylesheet('dpus__settings-ui', settingsUiStyle);
+
+    const settingsContainer = createDocumentFragment(`<div class="dpus__settings-ui"></div>`).children[0];
+    optionsSidebar.appendChild(settingsContainer);
+
+    return settingsContainer;
+}
+
+export function createSettingsUI(bodyCreationFn: () => DocumentFragment[]): void {
+    const settingsContainer = getOrCreateSettingsContainer();
+
     const globalSettings = getGlobalSettings();
+
+    const scriptIndex = getDpusGlobal().scripts.indexOf(getScriptId());
     const optionsHtml = createDocumentFragment(`
-        <article>
+        <article style="order: ${scriptIndex};">
             <header>
-                <h3>${headerTitle}</h3>
+                <h3>${getScriptName()}</h3>
             </header>
             <div class="pad-wrapper">
                 <section></section>
@@ -36,7 +68,7 @@ export function createSettingsUI(headerTitle: string, bodyCreationFn: () => Docu
         section.appendChild(option);
     }
 
-    optionsSidebar.appendChild(optionsHtml);
+    settingsContainer.appendChild(optionsHtml);
 }
 
 export function createBooleanSetting<T extends Record<string, unknown>>(
@@ -60,13 +92,42 @@ export function createBooleanSetting<T extends Record<string, unknown>>(
     return optionHtml;
 }
 
-// function createNumberOption<SettingsObject extends SettingsRecord>(
-//     settings: Settings<SettingsObject>,
-//     optionKey: keyof SettingsObject,
-//     label: string,
-//     range?: [number, number],
-// ): DocumentFragment {}
-//
+export function createNumberOption<T extends Record<string, unknown>>(
+    settings: Settings<T>,
+    optionKey: NumberOptionKeys<T>,
+    label: string,
+    range?: { min?: number; max?: number },
+): DocumentFragment {
+    const id = createRandomElementId();
+    const optionHtml = createDocumentFragment(`
+        <div>
+            <label for="${id}" class="input-group">
+                <span class="label-text">${label}:</span>
+                <input type="number" id="${id}" value="${settings._getString(optionKey)}" />
+            </label>
+        </div>
+    `);
+    const input: HTMLInputElement = optionHtml.querySelector(`input#${id}`)!;
+    const rangeMin = range?.min;
+    const rangeMax = range?.max;
+    if (rangeMin != null) {
+        input.min = rangeMin.toString();
+    }
+    if (rangeMax != null) {
+        input.max = rangeMax.toString();
+    }
+    input.addEventListener('change', () => {
+        const value = parseFloat(input.value);
+        if (rangeMin != null && value < rangeMin) {
+            showErrorMessage(`Value for option "${label}" is below minimum: ${value} (min: ${rangeMin})`);
+        }
+        if (rangeMax != null && value > rangeMax) {
+            showErrorMessage(`Value for option "${label}" is above maximum: ${value} (max: ${rangeMax})`);
+        }
+        settings._setNumber(optionKey, value);
+    });
+    return optionHtml;
+}
 
 export function createStringSetting<T extends Record<string, unknown>>(
     settings: Settings<T>,
@@ -77,7 +138,7 @@ export function createStringSetting<T extends Record<string, unknown>>(
     const optionHtml = createDocumentFragment(`
         <div>
             <label for="${id}" class="input-group">
-                <span class="label-text">${label}</span>
+                <span class="label-text">${label}:</span>
                 <input type="text" id="${id}" class="fullwidth" value="${settings._getString(optionKey)}" />
             </label>
         </div>
@@ -88,13 +149,34 @@ export function createStringSetting<T extends Record<string, unknown>>(
     });
     return optionHtml;
 }
-//
-// function createSelectOption<SettingsObject extends SettingsRecord>(
-//     settings: Settings<SettingsObject>,
-//     optionKey: keyof SettingsObject,
-//     label: string,
-//     values: string[],
-// ): DocumentFragment {}
+
+export function createSelectSetting<T extends Record<string, unknown>>(
+    settings: Settings<T>,
+    optionKey: StringOptionKeys<T>,
+    label: string,
+    options: { value: string; label: string }[],
+): DocumentFragment {
+    const id = createRandomElementId();
+    const optionHtml = createDocumentFragment(`
+        <div>
+            <label for="${id}" class="input-group">
+                <span class="label-text">${label}:</span>
+                <select id="${id}"></select>
+            </label>
+        </div>
+    `);
+    const select: HTMLSelectElement = optionHtml.querySelector(`select#${id}`)!;
+    for (const option of options) {
+        const optionElement = createDocumentFragment(`<option value="${option.value}">${option.label}</option>`)
+            .children[0];
+        select.appendChild(optionElement);
+    }
+    select.value = settings._getString(optionKey);
+    select.addEventListener('change', () => {
+        settings._setString(optionKey, select.value);
+    });
+    return optionHtml;
+}
 
 export function createSettingsButton(label: string, action: () => void): DocumentFragment {
     const buttonHtml = createDocumentFragment(`
