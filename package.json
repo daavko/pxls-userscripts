@@ -9,6 +9,7 @@
         "check-format": "prettier --check .",
         "typecheck": "tsc --noEmit",
         "build-color-selector": "node build.js src/scripts/auto-color-selector.user.ts",
+        "build-grief-tracker": "node build.js src/scripts/grief-tracker.user.ts",
         "build-milestone-watcher": "node build.js src/scripts/milestone-watcher.user.ts"
     },
     "devDependencies": {

@@ -1,0 +1,81 @@
+.dpus__grief-tracker {
+    position: absolute;
+    pointer-events: none;
+    user-select: none;
+    inset: 0;
+    z-index: 4;
+}
+
+.dpus__grief-tracker--hidden {
+    display: none;
+}
+
+.dpus__grief-tracker-grief {
+    position: absolute;
+    left: calc(var(--dpus--grief-coord-x) * 1px);
+    top: calc(var(--dpus--grief-coord-y) * 1px);
+    width: 1px;
+    height: 1px;
+    pointer-events: none;
+    user-select: none;
+
+    animation-iteration-count: infinite;
+}
+
+.dpus__grief-tracker--speed-fast .dpus__grief-tracker-grief {
+    animation-duration: 0.5s;
+}
+
+.dpus__grief-tracker--speed-slow .dpus__grief-tracker-grief {
+    animation-duration: 1s;
+}
+
+.dpus__grief-tracker--style-invert-flash-large .dpus__grief-tracker-grief {
+    scale: 2;
+    animation-name: dpus__grief-tracker-grief__invert-flash;
+    animation-timing-function: steps(1);
+}
+
+.dpus__grief-tracker--style-invert-flash-small .dpus__grief-tracker-grief {
+    scale: 1.5;
+    animation-name: dpus__grief-tracker-grief__invert-flash;
+    animation-timing-function: steps(1);
+}
+
+.dpus__grief-tracker--style-rgbw-flash-thick .dpus__grief-tracker-grief {
+    animation-name: dpus__grief-tracker-grief__rgbw-flash;
+    animation-timing-function: steps(1);
+
+    --dpus--grief--rgbw-flash-thickness: 0.55px;
+}
+
+.dpus__grief-tracker--style-rgbw-flash-thin .dpus__grief-tracker-grief {
+    animation-name: dpus__grief-tracker-grief__rgbw-flash;
+    animation-timing-function: steps(1);
+
+    --dpus--grief--rgbw-flash-thickness: 0.25px;
+}
+
+@keyframes dpus__grief-tracker-grief__invert-flash {
+    0% {
+        backdrop-filter: invert(0) brightness(1) contrast(1);
+    }
+    50% {
+        backdrop-filter: invert(1) brightness(2) contrast(2);
+    }
+}
+
+@keyframes dpus__grief-tracker-grief__rgbw-flash {
+    0% {
+        box-shadow: #ff0000 0 0 0 var(--dpus--grief--rgbw-flash-thickness);
+    }
+    25% {
+        box-shadow: #00ff00 0 0 0 var(--dpus--grief--rgbw-flash-thickness);
+    }
+    50% {
+        box-shadow: #0080ff 0 0 0 var(--dpus--grief--rgbw-flash-thickness);
+    }
+    75% {
+        box-shadow: white 0 0 0 var(--dpus--grief--rgbw-flash-thickness);
+    }
+}

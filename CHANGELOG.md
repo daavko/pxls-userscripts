@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Grief tracker v1.0.0
+
+- Initial release of the Grief tracker script
+
 ## Template color autoselector v2.4.0
 
 - Internal optimizations
