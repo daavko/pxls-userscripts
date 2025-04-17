@@ -61,7 +61,21 @@ const settingsDefault: SettingsType = {
     watchCanvasThousands: false,
     watchAllTimeThousands: false,
 };
-const settings = createScriptSettings(settingsSchema, settingsDefault);
+const settings = createScriptSettings(settingsSchema, settingsDefault, {
+    currentCanvasMilestones: [
+        (_, newValue): void => {
+            currentCanvasMilestones = getMilestones(newValue);
+        },
+    ],
+    allTimeMilestones: [
+        (_, newValue): void => {
+            allTimeMilestones = getMilestones(newValue);
+        },
+    ],
+});
+
+let currentCanvasMilestones: number[] = [];
+let allTimeMilestones: number[] = [];
 
 function initSettings(): void {
     createSettingsUI(() => [
@@ -75,12 +89,13 @@ function initSettings(): void {
 
 function initPixelCountListener(): void {
     const app = getApp();
+
     $(window).on('pxls:pixelCounts:update', () => {
         const currentCanvasCount = app.user.getPixelCount();
         const allTimeCount = app.user.getPixelCountAllTime();
 
-        const currentCanvasMilestone = checkMilestone(currentCanvasCount, settings.get('currentCanvasMilestones'));
-        const allTimeMilestone = checkMilestone(allTimeCount, settings.get('allTimeMilestones'));
+        const currentCanvasMilestone = checkMilestone(currentCanvasCount, currentCanvasMilestones);
+        const allTimeMilestone = checkMilestone(allTimeCount, allTimeMilestones);
 
         if (currentCanvasMilestone != null) {
             showInfoMessage(`You have reached a milestone on the current canvas: ${currentCanvasMilestone}`, 7000);
@@ -106,11 +121,17 @@ async function init(): Promise<void> {
     debug('Initializing script');
 
     initSettings();
+    currentCanvasMilestones = getMilestones(settings.get('currentCanvasMilestones'));
+    allTimeMilestones = getMilestones(settings.get('allTimeMilestones'));
+
     initPixelCountListener();
 }
 
-function checkMilestone(count: number, milestonesSettingValue: string): number | null {
-    const milestones = v.parse(milestoneSchema, milestonesSettingValue);
+function getMilestones(milestonesSettingValue: string): number[] {
+    return v.parse(milestoneSchema, milestonesSettingValue);
+}
+
+function checkMilestone(count: number, milestones: number[]): number | null {
     return milestones.find((m) => m === count) ?? null;
 }
 
