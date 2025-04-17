@@ -12,7 +12,7 @@
     }
 }
 
-#main-bubble[position="bottom right"] + .dpus__info-icons {
+#main-bubble[position='bottom right'] + .dpus__info-icons {
     right: unset;
     left: 1rem;
 }
@@ -43,6 +43,10 @@
 
 .dpus__info-icon--orange svg {
     fill: orange;
+}
+
+.dpus__info-icon--yellow svg {
+    fill: yellow;
 }
 
 .dpus__info-icon--gray svg {
