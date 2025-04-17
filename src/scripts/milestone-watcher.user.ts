@@ -4,7 +4,12 @@ import { debug } from '../modules/debug';
 import { showErrorMessage, showInfoMessage } from '../modules/message';
 import { getApp, globalInit, waitForApp } from '../modules/pxls-init';
 import { createScriptSettings, getGlobalSettings, initGlobalSettings } from '../modules/settings';
-import { createBooleanSetting, createSettingsUI, createStringSetting } from '../modules/settings-ui';
+import {
+    createBooleanSetting,
+    createSettingsResetButton,
+    createSettingsUI,
+    createStringSetting,
+} from '../modules/settings-ui';
 import type { NonNullableKeys } from '../util/types';
 
 globalInit({ scriptId: 'milestoneWatcher', scriptName: 'Milestone watcher' });
@@ -84,6 +89,7 @@ function initSettings(): void {
         createStringSetting(settings, 'allTimeMilestones', 'All-time milestones (comma-separated)'),
         createBooleanSetting(settings, 'watchCanvasThousands', 'Notify every 1000 pixels on current canvas'),
         createBooleanSetting(settings, 'watchAllTimeThousands', 'Notify every 1000 all-time pixels'),
+        createSettingsResetButton(),
     ]);
 }
 
