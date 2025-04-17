@@ -1,20 +1,14 @@
 import { mdiEyedropper } from '@mdi/js';
 import type { InferOutput } from 'valibot';
 import * as v from 'valibot';
-import { debug, setDebugName } from '../modules/debug';
+import { debug } from '../modules/debug';
 import { createInfoIcon, type InfoIcon, type InfoIconOptions, type InfoIconState } from '../modules/info-icon';
-import { setMessagePrefix, showErrorMessage } from '../modules/message';
+import { showErrorMessage } from '../modules/message';
 import { getApp, globalInit, waitForApp } from '../modules/pxls-init';
 import { anyColorSelected, getFastLookupPalette, selectColor, unselectColor } from '../modules/pxls-palette';
 import { getCurrentTemplate, TEMPLATE_CHANGE_EVENT_NAME, type TemplateData } from '../modules/pxls-template';
 import { getPxlsUIBoard, getPxlsUIMouseCoords } from '../modules/pxls-ui';
-import {
-    booleanSerializer,
-    createScriptSettings,
-    getGlobalSettings,
-    initGlobalSettings,
-    type ValueSerializerMap,
-} from '../modules/settings';
+import { createScriptSettings, getGlobalSettings, initGlobalSettings } from '../modules/settings';
 import {
     createBooleanSetting,
     createKeyboardShortcutText,
@@ -27,10 +21,8 @@ import {
 import { detemplatizeImageWorker, getTemplateImage } from '../modules/template';
 import type { NonNullableKeys } from '../util/types';
 
-globalInit();
-setDebugName('Template color autoselector');
-setMessagePrefix('Template color autoselector');
-initGlobalSettings('dpus_templateColorAutoselector_globalSettings');
+globalInit({ scriptId: 'templateColorAutoselector', scriptName: 'Template color autoselector' });
+initGlobalSettings();
 
 const settingsSchema = v.partial(
     v.object({
@@ -43,16 +35,7 @@ const settingsDefault: SettingsType = {
     deselectColorOutsideTemplate: false,
     selectColorWhenDeselectedInsideTemplate: false,
 };
-const settingsValueSerializerMap: ValueSerializerMap<SettingsType> = {
-    deselectColorOutsideTemplate: booleanSerializer,
-    selectColorWhenDeselectedInsideTemplate: booleanSerializer,
-};
-const settings = createScriptSettings(
-    'dpus_templateColorAutoselector_settings',
-    settingsSchema,
-    settingsDefault,
-    settingsValueSerializerMap,
-);
+const settings = createScriptSettings(settingsSchema, settingsDefault);
 
 // string[] with hex color values
 let palette: number[] = [];
@@ -84,12 +67,11 @@ const infoIconStates = [
 const infoIconOptions: InfoIconOptions<typeof infoIconStates> = {
     clickable: true,
     states: infoIconStates,
-    statesTitlePrefix: '[Template color autoselector]',
 };
 let infoIcon: InfoIcon<typeof infoIconStates> | null = null;
 
 function initSettings(): void {
-    createSettingsUI('Template color autoselector', () => [
+    createSettingsUI(() => [
         createSubheading('Keybinds'),
         createKeyboardShortcutText('Z', 'Toggle auto-select color'),
         createLineBreak(),

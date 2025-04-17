@@ -1,6 +1,7 @@
 import { debug } from './debug';
 import { addStylesheet, createDocumentFragment } from './document';
 import messageContainerStyle from './message.css';
+import { getScriptName } from './pxls-init';
 
 export type MessageType = 'info' | 'success' | 'error';
 
@@ -9,11 +10,6 @@ const DEFAULT_SUCCESS_MESSAGE_DURATION = 3000;
 const DEFAULT_ERROR_MESSAGE_DURATION = 5000;
 
 let MESSAGE_CONTAINER: Element | null = null;
-let MESSAGE_PREFIX: string | null = null;
-
-export function setMessagePrefix(prefix: string): void {
-    MESSAGE_PREFIX = prefix;
-}
 
 export function showMessage(message: string, type: MessageType, duration: number): void {
     let messageDivTypeClass: string;
@@ -32,7 +28,7 @@ export function showMessage(message: string, type: MessageType, duration: number
     }
 
     const messageDiv = createDocumentFragment(`
-        <div class="dpus__message ${messageDivTypeClass}">${formatMessage(MESSAGE_PREFIX, message)}</div>
+        <div class="dpus__message ${messageDivTypeClass}">${formatMessage(message)}</div>
     `);
 
     const messageDivChildren = Array.from(messageDiv.children);
@@ -57,17 +53,13 @@ export function showSuccessMessage(message: string, duration = DEFAULT_SUCCESS_M
 
 export function showErrorMessage(message: string, context?: Error, duration = DEFAULT_ERROR_MESSAGE_DURATION): void {
     if (context) {
-        console.error(formatMessage(MESSAGE_PREFIX, message), context);
+        console.error(formatMessage(message), context, context.cause);
     }
     showMessage(message, 'error', duration);
 }
 
-function formatMessage(prefix: string | null, message: string): string {
-    if (prefix == null) {
-        return `[UNKNOWN] ${message}`;
-    } else {
-        return `[${prefix}] ${message}`;
-    }
+function formatMessage(message: string): string {
+    return `[${getScriptName()}] ${message}`;
 }
 
 function getOrInitMessageContainer(): Element {

@@ -2,17 +2,7 @@ import type { GenericSchema, InferOutput } from 'valibot';
 import * as v from 'valibot';
 import type { NonNullableKeys } from '../util/types';
 import { showErrorMessage } from './message';
-
-export type ValueSerializer<T> = (value: T) => unknown;
-export type ValueSerializerMap<T extends Record<string, unknown>> = {
-    [K in keyof T]: ValueSerializer<T[K]>;
-};
-
-export const booleanSerializer: ValueSerializer<boolean> = (value) => value;
-export const numberSerializer: ValueSerializer<number> = (value) => value;
-export const stringSerializer: ValueSerializer<string> = (value) => value;
-export const numberArraySerializer: ValueSerializer<number[]> = (values) =>
-    values.map((value) => value.toString(10)).join(',');
+import { getScriptId } from './pxls-init';
 
 export type BooleanOption<T extends Record<string, unknown>, K extends keyof T> = T[K] extends boolean ? T[K] : never;
 export type NumberOption<T extends Record<string, unknown>, K extends keyof T> = T[K] extends number ? T[K] : never;
@@ -28,12 +18,16 @@ export type StringOptionKeys<T extends Record<string, unknown>> = {
     [K in keyof T]: T[K] extends string ? K : never;
 }[keyof T];
 
+export type OptionValueUpdateCallbackMap<T extends Record<string, unknown>> = {
+    [K in keyof T]: (oldValue: T[K], newValue: T[K]) => void;
+};
+
 export class Settings<const TSettings extends Record<string, unknown>> {
     constructor(
         private readonly storageKey: string,
         private readonly schema: GenericSchema<unknown, Partial<TSettings>>,
         private readonly defaultValue: TSettings,
-        private readonly valueSerializerMap: ValueSerializerMap<TSettings>,
+        private readonly optionValueUpdateCallbacks: Partial<OptionValueUpdateCallbackMap<TSettings>> = {},
     ) {
         this.init();
     }
@@ -45,8 +39,13 @@ export class Settings<const TSettings extends Record<string, unknown>> {
 
     set<K extends keyof TSettings>(option: K, value: TSettings[K]): void {
         const storedValue = this.loadFullStoredValue();
+        const oldSettingValue = storedValue[option];
         const newValue = { ...storedValue, [option]: value };
         this.saveStoredValue(newValue);
+        const callback = this.optionValueUpdateCallbacks[option];
+        if (callback) {
+            callback(oldSettingValue, value);
+        }
     }
 
     _getBoolean<K extends keyof TSettings>(option: K): BooleanOption<TSettings, K> {
@@ -125,9 +124,7 @@ export class Settings<const TSettings extends Record<string, unknown>> {
         const storedValue = this.loadFullStoredValue();
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
         for (const [key, value] of Object.entries(valueToStore) as [keyof TSettings, TSettings[keyof TSettings]][]) {
-            const serializer = this.valueSerializerMap[key];
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-            storedValue[key] = serializer(value) as TSettings[keyof TSettings];
+            storedValue[key] = value;
         }
         localStorage.setItem(this.storageKey, JSON.stringify(storedValue));
     }
@@ -146,22 +143,14 @@ const globalSettingsDefault: GlobalSettingsObject = {
     debug: false,
     settingsUiCollapsed: false,
 };
-const globalSettingsValueSerializerMap: ValueSerializerMap<GlobalSettingsObject> = {
-    debug: booleanSerializer,
-    settingsUiCollapsed: booleanSerializer,
-};
 
-export function initGlobalSettings(storageKey: string): void {
+export function initGlobalSettings(): void {
     if (GLOBAL_SETTINGS != null) {
         return;
     }
 
-    GLOBAL_SETTINGS = new Settings(
-        storageKey,
-        globalSettingsSchema,
-        globalSettingsDefault,
-        globalSettingsValueSerializerMap,
-    );
+    const storageKey = `dpus_${getScriptId()}_globalSettings`;
+    GLOBAL_SETTINGS = new Settings(storageKey, globalSettingsSchema, globalSettingsDefault);
 }
 
 export function getGlobalSettings(): NonNullable<typeof GLOBAL_SETTINGS> {
@@ -172,10 +161,10 @@ export function getGlobalSettings(): NonNullable<typeof GLOBAL_SETTINGS> {
 }
 
 export function createScriptSettings<const TSettings extends Record<string, unknown>>(
-    storageKey: string,
     schema: GenericSchema<unknown, Partial<TSettings>>,
     defaultValue: TSettings,
-    valueSerializerMap: ValueSerializerMap<TSettings>,
+    optionValueUpdateCallbacks?: Partial<OptionValueUpdateCallbackMap<TSettings>>,
 ): Settings<TSettings> {
-    return new Settings(storageKey, schema, defaultValue, valueSerializerMap);
+    const storageKey = `dpus_${getScriptId()}_settings`;
+    return new Settings(storageKey, schema, defaultValue, optionValueUpdateCallbacks);
 }
