@@ -56,17 +56,9 @@ export async function waitForApp(checkInterval = 1000): Promise<PxlsApp> {
     let app: PxlsApp;
     if (window.App) {
         debug('App found, checking login state');
-        if (window.App.user.isLoggedIn()) {
-            debug('User already logged in, resolving immediately');
-            await waitForAnimationFrame();
-            app = window.App;
-        } else {
-            debug('User not logged in, waiting for login state');
-            await waitForLogin();
-            await waitForAnimationFrame();
-            debug('Login state successful, resolving');
-            app = window.App;
-        }
+        await waitForLogin();
+        debug('Login state successful, resolving');
+        app = window.App;
     } else {
         debug('App not found, waiting for App...');
         app = await new Promise<PxlsApp>((resolve) => {
@@ -76,7 +68,6 @@ export async function waitForApp(checkInterval = 1000): Promise<PxlsApp> {
                     debug('App found, waiting for login state');
                     const innerApp = window.App;
                     await waitForLogin();
-                    await waitForAnimationFrame();
                     debug('Login state successful, resolving');
                     resolve(innerApp);
                 }
@@ -111,20 +102,27 @@ export function getDpusGlobal(): DPUS['global'] {
 }
 
 async function waitForLogin(): Promise<void> {
-    return new Promise((resolve) => {
-        $(window).on('pxls:user:loginState', (_event, loggedIn: unknown) => {
-            const loggedInParseResult = v.safeParse(v.boolean(), loggedIn);
-            if (loggedInParseResult.success) {
-                if (loggedInParseResult.output) {
-                    debug('User logged in, resolving');
-                    resolve();
+    const app = getApp();
+    if (app.user.isLoggedIn()) {
+        debug('User already logged in, resolving immediately');
+        await waitForAnimationFrame();
+        return;
+    } else {
+        return new Promise((resolve) => {
+            $(window).on('pxls:user:loginState', (_event, loggedIn: unknown) => {
+                const loggedInParseResult = v.safeParse(v.boolean(), loggedIn);
+                if (loggedInParseResult.success) {
+                    if (loggedInParseResult.output) {
+                        debug('User logged in, resolving');
+                        resolve();
+                    } else {
+                        debug('User not logged in, waiting for login state');
+                    }
                 } else {
-                    debug('User not logged in, waiting for login state');
+                    const errorMessage = 'Login state received is not a boolean';
+                    showErrorMessage(errorMessage, new Error(errorMessage, { cause: loggedInParseResult.issues }));
                 }
-            } else {
-                const errorMessage = 'Login state received is not a boolean';
-                showErrorMessage(errorMessage, new Error(errorMessage, { cause: loggedInParseResult.issues }));
-            }
+            });
         });
-    });
+    }
 }
