@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## Template color autoselector v2.4.0
+
+- Internal optimizations
+- Settings now sync across open tabs
+
 ## Milestone watcher v1.2.0
 
 - Internal optimizations
