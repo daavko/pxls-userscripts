@@ -28,11 +28,9 @@ debug('Loading grief tracker script');
 bindWebSocketProxy();
 addStylesheet('dpus__grief-tracker', griefTrackerStyles);
 
-const GRIEF_ANIMATION_STYLES = ['invertFlashLarge', 'invertFlashSmall', 'rgbwFlashThick', 'rgbwFlashThin'] as const;
+const GRIEF_ANIMATION_STYLES = ['rgbwFlashThick', 'rgbwFlashThin'] as const;
 type GriefAnimationStyle = (typeof GRIEF_ANIMATION_STYLES)[number];
 const GRIEF_ANIMATION_STYLE_CLASS_MAP: Record<GriefAnimationStyle, string> = {
-    invertFlashLarge: 'dpus__grief-tracker--style-invert-flash-large',
-    invertFlashSmall: 'dpus__grief-tracker--style-invert-flash-small',
     rgbwFlashThick: 'dpus__grief-tracker--style-rgbw-flash-thick',
     rgbwFlashThin: 'dpus__grief-tracker--style-rgbw-flash-thin',
 };
@@ -42,7 +40,7 @@ function stringToAnimationStyle(value: string): GriefAnimationStyle {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
         return value as GriefAnimationStyle;
     }
-    return 'invertFlashSmall';
+    return 'rgbwFlashThin';
 }
 
 const GRIEF_ANIMATION_SPEEDS = ['fast', 'slow'] as const;
@@ -52,7 +50,7 @@ const GRIEF_ANIMATION_SPEED_CLASS_MAP: Record<GriefAnimationSpeed, string> = {
     slow: 'dpus__grief-tracker--speed-slow',
 };
 
-const GRIEF_ANIMATION_NAMES = ['dpus__grief-tracker-grief__invert-flash', 'dpus__grief-tracker-grief__rgbw-flash'];
+const GRIEF_ANIMATION_NAMES = ['dpus__grief-tracker-grief__rgbw-flash'];
 
 function stringToAnimationSpeed(value: string): GriefAnimationSpeed {
     if ((GRIEF_ANIMATION_SPEEDS as readonly string[]).includes(value)) {
@@ -80,7 +78,7 @@ type SettingsType = NonNullableKeys<InferOutput<typeof settingsSchema>>;
 const defaultSettings: SettingsType = {
     enabled: true,
     maxGriefListSize: 10_000,
-    animationStyle: 'invertFlashSmall',
+    animationStyle: 'rgbwFlashThin',
     animationSpeed: 'slow',
 };
 const settings = createScriptSettings(settingsSchema, defaultSettings, {
@@ -150,8 +148,6 @@ function initSettings(): void {
         createBooleanSetting(settings, 'enabled', 'Highlight griefs'),
         createNumberOption(settings, 'maxGriefListSize', 'Max grief list size', { min: 1 }),
         createSelectSetting(settings, 'animationStyle', 'Animation style', [
-            { value: 'invertFlashLarge', label: 'Invert flash (large)' },
-            { value: 'invertFlashSmall', label: 'Invert flash (small)' },
             { value: 'rgbwFlashThick', label: 'RGBW flash (thick)' },
             { value: 'rgbwFlashThin', label: 'RGBW flash (thin)' },
         ]),
