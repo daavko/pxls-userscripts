@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## Grief tracker v1.1.0
+
+- Remove one of the available highlight animations, as it can cause the tab to freeze when zoomed out with enough
+  detected griefs
+- Add a "very slow" animation speed option
+
 ## Grief tracker v1.0.0
 
 - Initial release of the Grief tracker script
