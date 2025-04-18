@@ -163,7 +163,7 @@ export function createSelectSetting<T extends Record<string, unknown>>(
     settings: Settings<T>,
     optionKey: StringOptionKeys<T>,
     label: string,
-    options: { value: string; label: string }[],
+    options: { value: string; label: string; title?: string }[],
 ): DocumentFragment {
     const id = createRandomElementId();
     const optionHtml = createDocumentFragment(`
@@ -178,6 +178,9 @@ export function createSelectSetting<T extends Record<string, unknown>>(
     for (const option of options) {
         const optionElement = createDocumentFragment(`<option value="${option.value}">${option.label}</option>`)
             .children[0];
+        if (option.title != null) {
+            optionElement.setAttribute('title', option.title);
+        }
         select.appendChild(optionElement);
     }
     select.value = settings._getString(optionKey);
