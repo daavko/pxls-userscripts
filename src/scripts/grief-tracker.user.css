@@ -30,6 +30,10 @@
     animation-duration: 1s;
 }
 
+.dpus__grief-tracker--speed-very-slow .dpus__grief-tracker-grief {
+    animation-duration: 2s;
+}
+
 .dpus__grief-tracker--style-rgbw-flash-thick .dpus__grief-tracker-grief {
     animation-name: dpus__grief-tracker-grief__rgbw-flash;
     animation-timing-function: steps(1);

@@ -43,11 +43,12 @@ function stringToAnimationStyle(value: string): GriefAnimationStyle {
     return 'rgbwFlashThin';
 }
 
-const GRIEF_ANIMATION_SPEEDS = ['fast', 'slow'] as const;
+const GRIEF_ANIMATION_SPEEDS = ['fast', 'slow', 'verySlow'] as const;
 type GriefAnimationSpeed = (typeof GRIEF_ANIMATION_SPEEDS)[number];
 const GRIEF_ANIMATION_SPEED_CLASS_MAP: Record<GriefAnimationSpeed, string> = {
     fast: 'dpus__grief-tracker--speed-fast',
     slow: 'dpus__grief-tracker--speed-slow',
+    verySlow: 'dpus__grief-tracker--speed-very-slow',
 };
 
 const GRIEF_ANIMATION_NAMES = ['dpus__grief-tracker-grief__rgbw-flash'];
@@ -152,6 +153,7 @@ function initSettings(): void {
             { value: 'rgbwFlashThin', label: 'RGBW flash (thin)' },
         ]),
         createSelectSetting(settings, 'animationSpeed', 'Animation speed', [
+            { value: 'verySlow', label: 'Very slow' },
             { value: 'slow', label: 'Slow' },
             { value: 'fast', label: 'Fast' },
         ]),
