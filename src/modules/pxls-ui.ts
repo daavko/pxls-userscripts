@@ -1,6 +1,7 @@
 let PXLS_UI_BOARD: HTMLCanvasElement | null = null;
 let PXLS_UI_BOARD_CONTAINER: HTMLElement | null = null;
 let PXLS_UI_VIRGINMAP_BOARD: HTMLCanvasElement | null = null;
+let PXLS_UI_HEATMAP_BOARD: HTMLCanvasElement | null = null;
 let PXLS_UI_TEMPLATE_IMAGE: HTMLImageElement | null = null;
 let PXLS_UI_MOUSE_COORDS: HTMLElement | null = null;
 let PXLS_UI_PALETTE_DESELECT_BUTTON: HTMLElement | null = null;
@@ -28,6 +29,10 @@ export function getPxlsUIBoardContainer(): HTMLElement {
 
 export function getPxlsUIVirginmapBoard(): HTMLCanvasElement {
     return getPxlsUIElement(() => PXLS_UI_VIRGINMAP_BOARD, 'PXLS_UI_VIRGINMAP_BOARD');
+}
+
+export function getPxlsUIHeatmapBoard(): HTMLCanvasElement {
+    return getPxlsUIElement(() => PXLS_UI_HEATMAP_BOARD, 'PXLS_UI_HEATMAP_BOARD');
 }
 
 export function getPxlsUITemplateImage(): HTMLImageElement {
@@ -76,6 +81,11 @@ export function findUIElements(): void {
     PXLS_UI_VIRGINMAP_BOARD = document.querySelector('canvas#virginmap');
     if (!PXLS_UI_VIRGINMAP_BOARD) {
         throw new Error('Failed to find virginmap canvas, this should never happen');
+    }
+
+    PXLS_UI_HEATMAP_BOARD = document.querySelector('canvas#heatmap');
+    if (!PXLS_UI_HEATMAP_BOARD) {
+        throw new Error('Failed to find heatmap canvas, this should never happen');
     }
 
     PXLS_UI_TEMPLATE_IMAGE = document.querySelector('img.board-template');

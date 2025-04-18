@@ -8,7 +8,12 @@ import { showErrorMessage } from '../modules/message';
 import { globalInit, waitForApp } from '../modules/pxls-init';
 import { getFastLookupPalette } from '../modules/pxls-palette';
 import { getCurrentTemplate, TEMPLATE_CHANGE_EVENT_NAME, type TemplateData } from '../modules/pxls-template';
-import { getPxlsUIBoard, getPxlsUIBoardContainer, getPxlsUIVirginmapBoard } from '../modules/pxls-ui';
+import {
+    getPxlsUIBoard,
+    getPxlsUIBoardContainer,
+    getPxlsUIHeatmapBoard,
+    getPxlsUIVirginmapBoard,
+} from '../modules/pxls-ui';
 import { createScriptSettings, getGlobalSettings, initGlobalSettings } from '../modules/settings';
 import {
     createBooleanSetting,
@@ -61,10 +66,25 @@ function stringToAnimationSpeed(value: string): GriefAnimationSpeed {
     return 'slow';
 }
 
+const GRIEF_DETECTION_MODES = ['everything', 'nonVirginOnly', 'recentOnly', 'newOnly'] as const;
+type GriefDetectionMode = (typeof GRIEF_DETECTION_MODES)[number];
+
+function stringToGriefDetectionMode(value: string): GriefDetectionMode {
+    if ((GRIEF_DETECTION_MODES as readonly string[]).includes(value)) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
+        return value as GriefDetectionMode;
+    }
+    return 'recentOnly';
+}
+
 const settingsSchema = v.partial(
     v.object({
         enabled: v.boolean(),
         maxGriefListSize: v.number(),
+        detectionMode: v.pipe(
+            v.string(),
+            v.transform((value) => stringToGriefDetectionMode(value)),
+        ),
         animationStyle: v.pipe(
             v.string(),
             v.transform((value) => stringToAnimationStyle(value)),
@@ -79,6 +99,7 @@ type SettingsType = NonNullableKeys<InferOutput<typeof settingsSchema>>;
 const defaultSettings: SettingsType = {
     enabled: true,
     maxGriefListSize: 10_000,
+    detectionMode: 'recentOnly',
     animationStyle: 'rgbwFlashThin',
     animationSpeed: 'slow',
 };
@@ -94,6 +115,14 @@ const settings = createScriptSettings(settingsSchema, defaultSettings, {
                 }
             } else {
                 infoIcon?.setState('disabled');
+            }
+        },
+    ],
+    detectionMode: [
+        (_, newValue): void => {
+            clearGriefList();
+            if (newValue !== 'newOnly') {
+                collectExistingGriefs();
             }
         },
     ],
@@ -122,6 +151,8 @@ const settings = createScriptSettings(settingsSchema, defaultSettings, {
 let palette: number[] = [];
 
 let virginmapLoadPromise: Promise<void> | null = null;
+let heatmapLoadPromise: Promise<void> | null = null;
+let heatmapTimerId: number | null = null;
 
 let detemplatizedTemplate: ImageData | null = null;
 let detemplatizedTemplateUint32View: Uint32Array | null = null;
@@ -148,9 +179,27 @@ function initSettings(): void {
         createBooleanSetting(getGlobalSettings(), 'debug', 'Debug logging'),
         createBooleanSetting(settings, 'enabled', 'Highlight griefs'),
         createNumberOption(settings, 'maxGriefListSize', 'Max grief list size', { min: 1 }),
+        createSelectSetting(settings, 'detectionMode', 'Detection mode', [
+            { value: 'everything', label: 'Everything', title: 'Every incorrect pixel is highlighted' },
+            {
+                value: 'nonVirginOnly',
+                label: 'Non-virgin only',
+                title: 'Only non-virgin incorrect pixels are highlighted',
+            },
+            {
+                value: 'recentOnly',
+                label: 'Recent only',
+                title: 'Only incorrect pixels that are active on the heatmap are highlighted',
+            },
+            {
+                value: 'newOnly',
+                label: 'New only',
+                title: 'No incorrect pixels are highlighted by default, only new incorrect pixels are highlighted',
+            },
+        ]),
         createSelectSetting(settings, 'animationStyle', 'Animation style', [
-            { value: 'rgbwFlashThick', label: 'RGBW flash (thick)' },
-            { value: 'rgbwFlashThin', label: 'RGBW flash (thin)' },
+            { value: 'rgbwFlashThick', label: 'RGBW flash (thick)', title: 'Visible up to zoom 2' },
+            { value: 'rgbwFlashThin', label: 'RGBW flash (thin)', title: 'Visible up to zoom 1' },
         ]),
         createSelectSetting(settings, 'animationSpeed', 'Animation speed', [
             { value: 'verySlow', label: 'Very slow' },
@@ -161,25 +210,33 @@ function initSettings(): void {
     ]);
 }
 
+async function waitForCanvasLoaded(canvas: HTMLCanvasElement): Promise<void> {
+    return new Promise((resolve) => {
+        const sizeAttributesCheck = (): void => {
+            if (canvas.getAttribute('width') !== null && canvas.getAttribute('height') !== null) {
+                observer.disconnect();
+                resolve();
+            }
+        };
+        const observer = new MutationObserver(() => sizeAttributesCheck());
+        observer.observe(canvas, {
+            attributes: true,
+            attributeFilter: ['width', 'height'],
+        });
+        sizeAttributesCheck();
+    });
+}
+
 async function waitForVirginmapLoaded(): Promise<void> {
     debug('Waiting for virginmap to load');
-    if (!virginmapLoadPromise) {
-        const virginmap = getPxlsUIVirginmapBoard();
-        virginmapLoadPromise = new Promise((resolve) => {
-            const observer = new MutationObserver(() => {
-                if (virginmap.getAttribute('width') !== null && virginmap.getAttribute('height') !== null) {
-                    observer.disconnect();
-                    resolve();
-                }
-            });
-            observer.observe(virginmap, {
-                attributes: true,
-                attributeFilter: ['width', 'height'],
-            });
-        });
-    }
-
+    virginmapLoadPromise ??= waitForCanvasLoaded(getPxlsUIVirginmapBoard());
     return virginmapLoadPromise;
+}
+
+async function waitForHeatmapLoaded(): Promise<void> {
+    debug('Waiting for heatmap to load');
+    heatmapLoadPromise ??= waitForCanvasLoaded(getPxlsUIHeatmapBoard());
+    return heatmapLoadPromise;
 }
 
 async function waitForBoardLoaded(): Promise<void> {
@@ -275,10 +332,22 @@ function removeGrief(x: number, y: number): void {
 function clearGriefList(): void {
     griefList.clear();
     griefListContainer.textContent = '';
+    if (heatmapTimerId != null) {
+        window.clearTimeout(heatmapTimerId);
+    }
 }
 
 function showTooManyGriefsMessage(): void {
     showErrorMessage(`Too many griefs detected. Showing only the first ${settings.get('maxGriefListSize')}.`);
+}
+
+function getCanvasMask(canvas: HTMLCanvasElement, x: number, y: number, width: number, height: number): ImageData {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+        throw new Error('Failed to get canvas context for grief mask');
+    }
+
+    return ctx.getImageData(x, y, width, height);
 }
 
 function collectExistingGriefs(): void {
@@ -288,17 +357,13 @@ function collectExistingGriefs(): void {
     }
 
     const board = getPxlsUIBoard();
-    const virginmap = getPxlsUIVirginmapBoard();
     const boardCtx = board.getContext('2d');
 
     if (!boardCtx) {
         throw new Error('Failed to get board canvas context');
     }
 
-    const virginmapCtx = virginmap.getContext('2d');
-    if (!virginmapCtx) {
-        throw new Error('Failed to get virginmap canvas context');
-    }
+    const detectionMode = settings.get('detectionMode');
 
     const { x: templateX, y: templateY } = template;
     const boardImageData = boardCtx.getImageData(
@@ -308,12 +373,32 @@ function collectExistingGriefs(): void {
         detemplatizedTemplate.height,
     );
     const boardImageDataUint32View = new Uint32Array(boardImageData.data.buffer);
-    const virginmapImageData = virginmapCtx.getImageData(
-        templateX,
-        templateY,
-        detemplatizedTemplate.width,
-        detemplatizedTemplate.height,
-    );
+
+    let canvasMask = null;
+    if (detectionMode === 'nonVirginOnly') {
+        canvasMask = getCanvasMask(
+            getPxlsUIVirginmapBoard(),
+            templateX,
+            templateY,
+            detemplatizedTemplate.width,
+            detemplatizedTemplate.height,
+        );
+    } else if (detectionMode === 'recentOnly') {
+        canvasMask = getCanvasMask(
+            getPxlsUIHeatmapBoard(),
+            templateX,
+            templateY,
+            detemplatizedTemplate.width,
+            detemplatizedTemplate.height,
+        );
+        if (heatmapTimerId != null) {
+            window.clearTimeout(heatmapTimerId);
+        }
+        heatmapTimerId = window.setTimeout(() => {
+            clearGriefList();
+            collectExistingGriefs();
+        }, 60_000);
+    }
 
     const debugTimer = debugTime('collectExistingGriefs');
     const griefs: [number, number][] = [];
@@ -329,10 +414,12 @@ function collectExistingGriefs(): void {
                 continue;
             }
 
-            const virginmapAlpha = virginmapImageData.data[pixelAlphaIndex];
-            if (virginmapAlpha === 0) {
-                // ignore virgin pixels
-                continue;
+            if (canvasMask != null) {
+                const canvasMaskAlpha = canvasMask.data[pixelAlphaIndex];
+                if (canvasMaskAlpha === 0) {
+                    // ignore pixels that are not on the canvas mask
+                    continue;
+                }
             }
 
             const boardColor = boardImageDataUint32View[pixelIndex];
@@ -412,7 +499,9 @@ function templateChanged(template: TemplateData): void {
             detemplatizedTemplate = detemplatizedImageData;
             detemplatizedTemplateUint32View = new Uint32Array(detemplatizedImageData.data.buffer);
             clearGriefList();
-            collectExistingGriefs();
+            if (settings.get('detectionMode') !== 'newOnly') {
+                collectExistingGriefs();
+            }
             if (settings.get('enabled')) {
                 infoIcon?.setState('templateActive');
             } else {
@@ -433,7 +522,8 @@ async function init(): Promise<void> {
     infoIcon.setState('loadingBoard');
     await waitForBoardLoaded();
     app.overlays.virginmap.reload();
-    await waitForVirginmapLoaded();
+    app.overlays.heatmap.reload();
+    await Promise.all([waitForVirginmapLoaded(), waitForHeatmapLoaded()]);
     infoIcon.setState('default');
 
     debug('Initializing script');
