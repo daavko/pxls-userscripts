@@ -476,6 +476,8 @@ async function init(): Promise<void> {
     if (template) {
         debug('Template already set, loading');
         templateChanged(template);
+    } else if (!settings.get('enabled')) {
+        infoIcon.setState('disabled');
     }
 }
 
