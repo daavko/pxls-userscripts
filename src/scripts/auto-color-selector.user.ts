@@ -162,9 +162,18 @@ async function init(): Promise<void> {
     initBodyEventListeners();
     enableCoordsMutationObserver();
 
-    infoIcon.element.addEventListener('click', () => {
-        manualToggle = !manualToggle;
+    infoIcon.element.addEventListener('click', (e) => {
+        if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) {
+            return;
+        }
+
+        if (e.button !== 0) {
+            return;
+        }
+
         debug('Info icon clicked');
+
+        manualToggle = !manualToggle;
         if (manualToggle) {
             maybeEnableCoordsMutationObserver();
         } else {
