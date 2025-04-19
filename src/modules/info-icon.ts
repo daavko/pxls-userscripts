@@ -29,7 +29,7 @@ export class InfoIcon<const T extends InfoIconState[]> {
     private activeState: InfoIconState | null = null;
 
     constructor(
-        readonly element: Element,
+        readonly element: HTMLElement,
         options: Partial<InfoIconOptions<T>> = {},
     ) {
         const optionsWithDefaults = {
@@ -75,13 +75,14 @@ export function createInfoIcon<const T extends InfoIconState[]>(
     pathData: string,
     options?: Partial<InfoIconOptions<T>>,
 ): InfoIcon<T> {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
     const svg = createDocumentFragment(`
         <div class="dpus__info-icon">
             <svg viewBox="0 0 24 24">
                 <path d="${pathData}" />
             </svg>
         </div>
-    `).children[0];
+    `).children[0] as HTMLElement;
     getOrInitInfoIconsContainer().appendChild(svg);
     return new InfoIcon(svg, options);
 }
