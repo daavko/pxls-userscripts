@@ -19,6 +19,7 @@ import {
     createBooleanSetting,
     createNumberOption,
     createSelectSetting,
+    createSettingsButton,
     createSettingsResetButton,
     createSettingsUI,
 } from '../modules/settings-ui';
@@ -206,8 +207,21 @@ function initSettings(): void {
             { value: 'slow', label: 'Slow' },
             { value: 'fast', label: 'Fast' },
         ]),
+        createSettingsButton('Clear griefs', () => clearGriefList()),
         createSettingsResetButton(),
     ]);
+}
+
+function initBodyEventListeners(): void {
+    document.body.addEventListener('keydown', (event) => {
+        if (event.key === 'y') {
+            if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
+                return;
+            }
+
+            clearGriefList();
+        }
+    });
 }
 
 async function waitForCanvasLoaded(canvas: HTMLCanvasElement): Promise<void> {
@@ -529,6 +543,7 @@ async function init(): Promise<void> {
     debug('Initializing script');
 
     initSettings();
+    initBodyEventListeners();
     const boardContainer = getPxlsUIBoardContainer();
     boardContainer.appendChild(griefListContainer);
     const griefListContainerSpeedClass = GRIEF_ANIMATION_SPEED_CLASS_MAP[settings.get('animationSpeed')];
@@ -537,9 +552,17 @@ async function init(): Promise<void> {
     griefListContainer.classList.add(griefListContainerStyleClass);
     griefListContainer.classList.toggle('dpus__grief-tracker--hidden', !settings.get('enabled'));
 
-    infoIcon.element.addEventListener('click', () => {
+    infoIcon.element.addEventListener('click', (e) => {
+        if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) {
+            return;
+        }
+
         debug('Info icon clicked');
-        settings.set('enabled', !settings.get('enabled'));
+        if (e.button === 0) {
+            settings.set('enabled', !settings.get('enabled'));
+        } else if (e.button === 2) {
+            clearGriefList();
+        }
     });
 
     window.addEventListener(PIXEL_PLACED_EVENT_NAME, ({ detail: { pixels } }) => {
