@@ -127,6 +127,13 @@ function initBoardEventListeners(): void {
 
 function initBodyEventListeners(): void {
     document.body.addEventListener('keydown', (event) => {
+        if (
+            event.target instanceof Node &&
+            (event.target.nodeName === 'INPUT' || event.target.nodeName === 'TEXTAREA')
+        ) {
+            return;
+        }
+
         if (event.key === 'z') {
             if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
                 return;
