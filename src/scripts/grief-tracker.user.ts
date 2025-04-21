@@ -1,4 +1,4 @@
-import { mdiMapMarkerAlertOutline } from '@mdi/js';
+import { mdiMapMarkerAlertOutline, mdiMapMarkerRemoveVariant } from '@mdi/js';
 import type { InferOutput } from 'valibot';
 import * as v from 'valibot';
 import { debug, debugTime } from '../modules/debug';
@@ -94,6 +94,7 @@ const settingsSchema = v.partial(
             v.string(),
             v.transform((value) => stringToAnimationSpeed(value)),
         ),
+        showClearGriefsButton: v.boolean(),
     }),
 );
 type SettingsType = NonNullableKeys<InferOutput<typeof settingsSchema>>;
@@ -103,6 +104,7 @@ const defaultSettings: SettingsType = {
     detectionMode: 'recentOnly',
     animationStyle: 'rgbwFlashThin',
     animationSpeed: 'slow',
+    showClearGriefsButton: true,
 };
 const settings = createScriptSettings(settingsSchema, defaultSettings, {
     enabled: [
@@ -147,6 +149,11 @@ const settings = createScriptSettings(settingsSchema, defaultSettings, {
             }
         },
     ],
+    showClearGriefsButton: [
+        (_, newValue): void => {
+            clearGriefsIcon?.toggleHidden(!newValue);
+        },
+    ],
 });
 
 let palette: number[] = [];
@@ -174,6 +181,13 @@ const infoIconOptions: InfoIconOptions<typeof infoIconStates> = {
     states: infoIconStates,
 };
 let infoIcon: InfoIcon<typeof infoIconStates> | null = null;
+
+const clearIconStates = [{ key: 'default', color: 'white', title: 'Clear griefs' }] as const satisfies InfoIconState[];
+const clearIconOptions: InfoIconOptions<typeof clearIconStates> = {
+    clickable: true,
+    states: clearIconStates,
+};
+let clearGriefsIcon: InfoIcon<typeof clearIconStates> | null = null;
 
 function initSettings(): void {
     createSettingsUI(() => [
@@ -207,6 +221,7 @@ function initSettings(): void {
             { value: 'slow', label: 'Slow' },
             { value: 'fast', label: 'Fast' },
         ]),
+        createBooleanSetting(settings, 'showClearGriefsButton', 'Show "Clear griefs" icon button'),
         createSettingsButton('Clear griefs', () => clearGriefList()),
         createSettingsResetButton(),
     ]);
@@ -532,6 +547,8 @@ async function init(): Promise<void> {
     const app = await waitForApp();
     palette = await getFastLookupPalette();
     infoIcon = createInfoIcon(mdiMapMarkerAlertOutline, infoIconOptions);
+    clearGriefsIcon = createInfoIcon(mdiMapMarkerRemoveVariant, clearIconOptions);
+    clearGriefsIcon.toggleHidden(!settings.get('showClearGriefsButton'));
 
     infoIcon.setState('loadingBoard');
     await waitForBoardLoaded();
@@ -560,7 +577,15 @@ async function init(): Promise<void> {
         debug('Info icon clicked');
         if (e.button === 0) {
             settings.set('enabled', !settings.get('enabled'));
-        } else if (e.button === 2) {
+        }
+    });
+    clearGriefsIcon.element.addEventListener('click', (e) => {
+        if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) {
+            return;
+        }
+
+        debug('Clear icon clicked');
+        if (e.button === 0) {
             clearGriefList();
         }
     });

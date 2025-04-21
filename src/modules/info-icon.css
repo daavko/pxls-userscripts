@@ -29,6 +29,10 @@
     }
 }
 
+.dpus__info-icon--hidden {
+    display: none;
+}
+
 .dpus__info-icon--white svg {
     fill: white;
 }
