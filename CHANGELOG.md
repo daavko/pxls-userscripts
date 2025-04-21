@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## Template color autoselector v2.5.0
+
+- Update some internal modules due to changes made for the Grief tracker
+- Icon button now only reacts to left click, without keyboard modifiers
+- Fix keyboard shortcut reacting when user is typing in a text input
+
 ## Grief tracker v1.1.0
 
 - Remove one of the available highlight animations, as it can cause the tab to freeze when zoomed out with enough
