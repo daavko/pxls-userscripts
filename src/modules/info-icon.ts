@@ -66,6 +66,10 @@ export class InfoIcon<const T extends InfoIconState[]> {
         }
     }
 
+    toggleHidden(hide?: boolean): void {
+        this.element.classList.toggle('dpus__info-icon--hidden', hide);
+    }
+
     private classNameFromState(state: InfoIconColor): string {
         return `dpus__info-icon--${state}`;
     }
