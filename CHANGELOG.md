@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## Grief tracker v1.2.0
+
+- Icon button is now properly set to "disabled" when there's no template and grief overlay is disabled in settings
+- There are now 4 configurable modes for the grief overlay:
+    - "Everything" - initially shows all griefs
+    - "Non-virgin only" - initially shows only griefs on non-virgin pixels
+    - "Recent only" - initially shows only griefs on pixels that are active on the heatmap
+    - "New only" - initially shows no griefs, will only show new ones
+- Added 3 ways to clear the entire grief list:
+    - Button in settings
+    - New icon button next to the existing one (can be disabled in settings)
+    - Keyboard shortcut, the Y key (without any modifiers)
+
 ## Template color autoselector v2.5.0
 
 - Update some internal modules due to changes made for the Grief tracker
