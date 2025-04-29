@@ -1,7 +1,5 @@
 export async function waitForAnimationFrame(): Promise<void> {
-    return new Promise((resolve) => {
-        requestAnimationFrame(() => {
-            resolve();
-        });
-    });
+    const { promise, resolve } = Promise.withResolvers<void>();
+    requestAnimationFrame(() => resolve());
+    return promise;
 }
