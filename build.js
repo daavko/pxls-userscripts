@@ -80,6 +80,25 @@ const cssMinifyPlugin = {
         });
     },
 };
+const workerPlugin = {
+    name: 'worker-plugin',
+    setup(build) {
+        build.onLoad({ filter: /\.worker\.ts$/ }, async (args) => {
+            const result = await esbuild.build({
+                entryPoints: [args.path],
+                loader: { '.ts': 'ts' },
+                bundle: true,
+                minify: options.minify,
+                write: false,
+                format: 'iife',
+            });
+            return {
+                contents: result.outputFiles[0].text,
+                loader: 'text',
+            };
+        });
+    },
+};
 const watchPlugin = {
     name: 'watch-plugin',
     setup(build) {
@@ -97,7 +116,7 @@ if (options.watch) {
     console.log(`Watching ${filename}...`);
     const context = await esbuild.context({
         ...esbuildOptions,
-        plugins: [cssMinifyPlugin, watchPlugin],
+        plugins: [cssMinifyPlugin, workerPlugin, watchPlugin],
     });
     await context.rebuild();
     console.log('Watching for changes...');
@@ -106,7 +125,7 @@ if (options.watch) {
     console.log(`Building ${filename}...`);
     await esbuild.build({
         ...esbuildOptions,
-        plugins: [cssMinifyPlugin],
+        plugins: [cssMinifyPlugin, workerPlugin],
     });
     console.log(`Build complete. Output in 'dist' directory.`);
 }

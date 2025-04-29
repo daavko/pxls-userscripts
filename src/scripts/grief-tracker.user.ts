@@ -23,7 +23,7 @@ import {
     createSettingsResetButton,
     createSettingsUI,
 } from '../modules/settings-ui';
-import { detemplatizeImageWorker, getTemplateImage } from '../modules/template';
+import { detemplatizeImage, getTemplateImage } from '../modules/template';
 import { bindWebSocketProxy, PIXEL_PLACED_EVENT_NAME, type PlacedPixelData } from '../modules/websocket';
 import type { NonNullableKeys } from '../util/types';
 import griefTrackerStyles from './grief-tracker.user.css';
@@ -521,7 +521,7 @@ function templateChanged(template: TemplateData): void {
     getTemplateImage()
         .then(async (imageData) => {
             debug('Template image loaded');
-            return detemplatizeImageWorker(imageData, width);
+            return detemplatizeImage(imageData, width);
         })
         .then((detemplatizedImageData) => {
             debug('Template image detemplatized');
