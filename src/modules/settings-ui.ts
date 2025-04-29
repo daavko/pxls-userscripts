@@ -106,7 +106,7 @@ export function createNumberOption<T extends Record<string, unknown>>(
         <div>
             <label for="${id}" class="input-group">
                 <span class="label-text">${label}:</span>
-                <input type="number" id="${id}" value="${settings._getString(optionKey)}" />
+                <input type="number" id="${id}" value="${settings._getNumber(optionKey)}" />
             </label>
         </div>
     `);
@@ -130,7 +130,7 @@ export function createNumberOption<T extends Record<string, unknown>>(
         settings._setNumber(optionKey, value);
     });
     settings.addCallback(optionKey, () => {
-        input.value = settings._getString(optionKey).toString();
+        input.value = settings._getNumber(optionKey).toString();
     });
     return optionHtml;
 }
@@ -204,10 +204,13 @@ export function createSettingsButton(label: string, action: () => void): Documen
     return buttonHtml;
 }
 
-export function createSettingsResetButton(): DocumentFragment {
+export function createSettingsResetButton(scriptSettings: Settings<Record<string, unknown>>[] = []): DocumentFragment {
     const globalSettings = getGlobalSettings();
     return createSettingsButton('Reset options', () => {
         globalSettings.reset();
+        for (const settings of scriptSettings) {
+            settings.reset();
+        }
     });
 }
 
