@@ -240,20 +240,20 @@ function initBodyEventListeners(): void {
 }
 
 async function waitForCanvasLoaded(canvas: HTMLCanvasElement): Promise<void> {
-    return new Promise((resolve) => {
-        const sizeAttributesCheck = (): void => {
-            if (canvas.getAttribute('width') !== null && canvas.getAttribute('height') !== null) {
-                observer.disconnect();
-                resolve();
-            }
-        };
-        const observer = new MutationObserver(() => sizeAttributesCheck());
-        observer.observe(canvas, {
-            attributes: true,
-            attributeFilter: ['width', 'height'],
-        });
-        sizeAttributesCheck();
+    const { promise, resolve } = Promise.withResolvers<void>();
+    const sizeAttributesCheck = (): void => {
+        if (canvas.getAttribute('width') !== null && canvas.getAttribute('height') !== null) {
+            observer.disconnect();
+            resolve();
+        }
+    };
+    const observer = new MutationObserver(() => sizeAttributesCheck());
+    observer.observe(canvas, {
+        attributes: true,
+        attributeFilter: ['width', 'height'],
     });
+    sizeAttributesCheck();
+    return promise;
 }
 
 async function waitForVirginmapLoaded(): Promise<void> {
@@ -275,19 +275,19 @@ async function waitForBoardLoaded(): Promise<void> {
     if (!ctx) {
         throw new Error('Failed to get canvas context');
     }
-    return new Promise((resolve) => {
-        const intervalId = setInterval(() => {
-            const imageData = ctx.getImageData(0, 0, board.width, board.height);
-            for (let i = 0; i < imageData.data.length; i += 4) {
-                // find the first non-transparent pixel
-                if (imageData.data[i + 3] !== 0) {
-                    clearInterval(intervalId);
-                    resolve();
-                    return;
-                }
+    const { promise, resolve } = Promise.withResolvers<void>();
+    const intervalId = setInterval(() => {
+        const imageData = ctx.getImageData(0, 0, board.width, board.height);
+        for (let i = 0; i < imageData.data.length; i += 4) {
+            // find the first non-transparent pixel
+            if (imageData.data[i + 3] !== 0) {
+                clearInterval(intervalId);
+                resolve();
+                return;
             }
-        }, 1000);
-    });
+        }
+    }, 1000);
+    return promise;
 }
 
 function coordToMapKey(x: number, y: number): string {

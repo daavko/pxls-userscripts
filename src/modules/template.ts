@@ -159,26 +159,26 @@ export async function detemplatizeImageWorker(template: TemplateImage, targetWid
     const workerBlob = new Blob([DETEMPLATIZE_WORKER_SCRIPT], { type: 'application/javascript' });
     const workerObjectURL = URL.createObjectURL(workerBlob);
     const worker = new Worker(workerObjectURL);
-    const resultPromise = new Promise<ImageData>((resolve, reject) => {
-        worker.onmessage = (e: MessageEvent<DetemplatizeWorkerResult>): void => {
-            switch (e.data.type) {
-                case 'success':
-                    resolve(e.data.image);
-                    break;
-                case 'error':
-                    reject(e.data.error);
-                    break;
-                default:
-                    reject(new Error('Detemplatize worker returned unknown result', { cause: e.data }));
-            }
-        };
+    const { promise: resultPromise, resolve, reject } = Promise.withResolvers<ImageData>();
 
-        worker.onerror = (e): void => {
-            reject(new Error('Unknown detemplatize worker error', { cause: e.error }));
-        };
+    worker.onmessage = (e: MessageEvent<DetemplatizeWorkerResult>): void => {
+        switch (e.data.type) {
+            case 'success':
+                resolve(e.data.image);
+                break;
+            case 'error':
+                reject(e.data.error);
+                break;
+            default:
+                reject(new Error('Detemplatize worker returned unknown result', { cause: e.data }));
+        }
+    };
+    worker.onerror = (e): void => {
+        reject(new Error('Unknown detemplatize worker error', { cause: e.error }));
+    };
 
-        worker.postMessage({ image: template.imageData, targetWidth, debugEnabled: debugEnabled() });
-    });
+    worker.postMessage({ image: template.imageData, targetWidth, debugEnabled: debugEnabled() });
+
     void resultPromise.finally(() => {
         worker.terminate();
         URL.revokeObjectURL(workerObjectURL);

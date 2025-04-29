@@ -61,18 +61,18 @@ export async function waitForApp(checkInterval = 1000): Promise<PxlsApp> {
         app = window.App;
     } else {
         debug('App not found, waiting for App...');
-        app = await new Promise<PxlsApp>((resolve) => {
-            const checkIntervalId = setInterval(async () => {
-                if (window.App) {
-                    clearInterval(checkIntervalId);
-                    debug('App found, waiting for login state');
-                    const innerApp = window.App;
-                    await waitForLogin();
-                    debug('Login state successful, resolving');
-                    resolve(innerApp);
-                }
-            }, checkInterval);
-        });
+        const { promise, resolve } = Promise.withResolvers<PxlsApp>();
+        const checkIntervalId = setInterval(async () => {
+            if (window.App) {
+                clearInterval(checkIntervalId);
+                debug('App found, waiting for login state');
+                const innerApp = window.App;
+                await waitForLogin();
+                debug('Login state successful, resolving');
+                resolve(innerApp);
+            }
+        }, checkInterval);
+        app = await promise;
     }
 
     findUIElements();
@@ -108,21 +108,21 @@ async function waitForLogin(): Promise<void> {
         await waitForAnimationFrame();
         return;
     } else {
-        return new Promise((resolve) => {
-            $(window).on('pxls:user:loginState', (_event, loggedIn: unknown) => {
-                const loggedInParseResult = v.safeParse(v.boolean(), loggedIn);
-                if (loggedInParseResult.success) {
-                    if (loggedInParseResult.output) {
-                        debug('User logged in, resolving');
-                        resolve();
-                    } else {
-                        debug('User not logged in, waiting for login state');
-                    }
+        const { promise, resolve } = Promise.withResolvers<void>();
+        $(window).on('pxls:user:loginState', (_event, loggedIn: unknown) => {
+            const loggedInParseResult = v.safeParse(v.boolean(), loggedIn);
+            if (loggedInParseResult.success) {
+                if (loggedInParseResult.output) {
+                    debug('User logged in, resolving');
+                    resolve();
                 } else {
-                    const errorMessage = 'Login state received is not a boolean';
-                    showErrorMessage(errorMessage, new Error(errorMessage, { cause: loggedInParseResult.issues }));
+                    debug('User not logged in, waiting for login state');
                 }
-            });
+            } else {
+                const errorMessage = 'Login state received is not a boolean';
+                showErrorMessage(errorMessage, new Error(errorMessage, { cause: loggedInParseResult.issues }));
+            }
         });
+        return promise;
     }
 }
