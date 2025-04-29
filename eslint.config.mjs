@@ -45,5 +45,11 @@ export default defineConfig([
             '@typescript-eslint/strict-boolean-expressions': ['error', { allowNumber: false, allowString: false }],
         },
     },
+    {
+        files: ['src/workers/**/*.{js,mjs,cjs,ts,mts,cts}'],
+        languageOptions: {
+            globals: globals.worker,
+        },
+    },
     eslintConfigPrettier,
 ]);
