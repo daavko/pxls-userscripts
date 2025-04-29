@@ -34,19 +34,15 @@ export type OptionValueUpdateCallbackMap<T extends Record<string, unknown>> = {
 export class Settings<const TSettings extends Record<string, unknown>> {
     private currentValue: TSettings;
 
-    private readonly optionValueUpdateCallbacks: Partial<OptionValueUpdateCallbackMap<TSettings>>;
-
     private readonly syncChannel = new BroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME);
 
     constructor(
         private readonly storageKey: string,
         private readonly schema: GenericSchema<unknown, Partial<TSettings>>,
         private readonly defaultValue: TSettings,
-        private readonly defaultCallbacks: Partial<OptionValueUpdateCallbackMap<TSettings>> = {},
+        private readonly optionValueUpdateCallbacks: Partial<OptionValueUpdateCallbackMap<TSettings>> = {},
     ) {
         this.currentValue = this.init();
-
-        this.optionValueUpdateCallbacks = defaultCallbacks;
 
         this.syncChannel.addEventListener('message', (event) => {
             const parsedMessage = v.safeParse(settingsSyncMessageSchema, event.data);
