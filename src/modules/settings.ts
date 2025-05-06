@@ -13,25 +13,38 @@ const settingsSyncMessageSchema = v.object({
 });
 type SettingsSyncMessage = InferOutput<typeof settingsSyncMessageSchema>;
 
-export type BooleanOption<T extends Record<string, unknown>, K extends keyof T> = T[K] extends boolean ? T[K] : never;
-export type NumberOption<T extends Record<string, unknown>, K extends keyof T> = T[K] extends number ? T[K] : never;
-export type StringOption<T extends Record<string, unknown>, K extends keyof T> = T[K] extends string ? T[K] : never;
+export type SettingType = boolean | number | string;
+export type SettingsRecord = Record<string, SettingType>;
 
-export type BooleanOptionKeys<T extends Record<string, unknown>> = {
+export type BooleanOption<T extends SettingsRecord, K extends keyof T> = T[K] extends boolean ? T[K] : never;
+export type NumberOption<T extends SettingsRecord, K extends keyof T> = T[K] extends number ? T[K] : never;
+export type StringOption<T extends SettingsRecord, K extends keyof T> = T[K] extends string ? T[K] : never;
+
+export type BooleanOptionKeys<T extends SettingsRecord> = {
     [K in keyof T]: T[K] extends boolean ? K : never;
 }[keyof T];
-export type NumberOptionKeys<T extends Record<string, unknown>> = {
+export type NumberOptionKeys<T extends SettingsRecord> = {
     [K in keyof T]: T[K] extends number ? K : never;
 }[keyof T];
-export type StringOptionKeys<T extends Record<string, unknown>> = {
+export type StringOptionKeys<T extends SettingsRecord> = {
     [K in keyof T]: T[K] extends string ? K : never;
 }[keyof T];
 
-export type OptionValueUpdateCallbackMap<T extends Record<string, unknown>> = {
+export type BooleanOptions<T extends SettingsRecord> = {
+    [K in keyof T]: T[K] extends boolean ? K : never;
+};
+export type NumberOptions<T extends SettingsRecord> = {
+    [K in keyof T]: T[K] extends number ? K : never;
+};
+export type StringOptions<T extends SettingsRecord> = {
+    [K in keyof T]: T[K] extends string ? K : never;
+};
+
+export type OptionValueUpdateCallbackMap<T extends SettingsRecord> = {
     [K in keyof T]?: ((oldValue: T[K], newValue: T[K]) => void)[];
 };
 
-export class Settings<const TSettings extends Record<string, unknown>> {
+export class Settings<TSettings extends SettingsRecord> {
     private currentValue: TSettings;
 
     private readonly syncChannel = new BroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME);
@@ -40,7 +53,7 @@ export class Settings<const TSettings extends Record<string, unknown>> {
         private readonly storageKey: string,
         private readonly schema: GenericSchema<unknown, Partial<TSettings>>,
         private readonly defaultValue: TSettings,
-        private readonly optionValueUpdateCallbacks: Partial<OptionValueUpdateCallbackMap<TSettings>> = {},
+        private readonly optionValueUpdateCallbacks: OptionValueUpdateCallbackMap<TSettings> = {},
     ) {
         this.currentValue = this.init();
 
@@ -76,10 +89,16 @@ export class Settings<const TSettings extends Record<string, unknown>> {
         });
     }
 
+    get<K extends BooleanOptionKeys<TSettings>>(option: K): BooleanOption<TSettings, K>;
+    get<K extends NumberOptionKeys<TSettings>>(option: K): NumberOption<TSettings, K>;
+    get<K extends StringOptionKeys<TSettings>>(option: K): StringOption<TSettings, K>;
     get<K extends keyof TSettings>(option: K): TSettings[K] {
         return this.currentValue[option];
     }
 
+    set<K extends BooleanOptionKeys<TSettings>>(option: K, value: BooleanOption<TSettings, K>): void;
+    set<K extends NumberOptionKeys<TSettings>>(option: K, value: NumberOption<TSettings, K>): void;
+    set<K extends StringOptionKeys<TSettings>>(option: K, value: StringOption<TSettings, K>): void;
     set<K extends keyof TSettings>(option: K, value: TSettings[K]): void {
         const storedValue = this.loadFullStoredValue();
         const oldSettingValue = storedValue[option];
@@ -115,29 +134,13 @@ export class Settings<const TSettings extends Record<string, unknown>> {
         }
     }
 
-    _getBoolean<K extends keyof TSettings>(option: K): BooleanOption<TSettings, K> {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-        return this.get(option) as BooleanOption<TSettings, K>;
-    }
-
-    _setBoolean<K extends BooleanOptionKeys<TSettings>>(option: K, value: boolean): void {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-        this.set(option, value as TSettings[K]);
-    }
-
-    _getNumber<K extends keyof TSettings>(option: K): NumberOption<TSettings, K> {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-        return this.get(option) as NumberOption<TSettings, K>;
-    }
-
+    // _setBoolean<K extends BooleanOptionKeys<TSettings>>(option: K, value: boolean): void {
+    //     this.set(option, value);
+    // }
+    //
     _setNumber<K extends NumberOptionKeys<TSettings>>(option: K, value: number): void {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
         this.set(option, value as TSettings[K]);
-    }
-
-    _getString<K extends keyof TSettings>(option: K): StringOption<TSettings, K> {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-        return this.get(option) as StringOption<TSettings, K>;
     }
 
     _setString<K extends StringOptionKeys<TSettings>>(option: K, value: string): void {
@@ -234,10 +237,10 @@ export function getGlobalSettings(): NonNullable<typeof GLOBAL_SETTINGS> {
     return GLOBAL_SETTINGS;
 }
 
-export function createScriptSettings<const TSettings extends Record<string, unknown>>(
+export function createScriptSettings<const TSettings extends SettingsRecord>(
     schema: GenericSchema<unknown, Partial<TSettings>>,
     defaultValue: TSettings,
-    optionValueUpdateCallbacks?: Partial<OptionValueUpdateCallbackMap<TSettings>>,
+    optionValueUpdateCallbacks?: OptionValueUpdateCallbackMap<TSettings>,
 ): Settings<TSettings> {
     const storageKey = `dpus_${getScriptId()}_settings`;
     return new Settings(storageKey, schema, defaultValue, optionValueUpdateCallbacks);

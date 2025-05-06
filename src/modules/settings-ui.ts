@@ -6,6 +6,7 @@ import {
     getGlobalSettings,
     type NumberOptionKeys,
     Settings,
+    type SettingsRecord,
     type StringOptionKeys,
 } from './settings';
 import settingsUiStyle from './settings-ui.css';
@@ -71,7 +72,7 @@ export function createSettingsUI(bodyCreationFn: () => DocumentFragment[]): void
     settingsContainer.appendChild(optionsHtml);
 }
 
-export function createBooleanSetting<T extends Record<string, unknown>>(
+export function createBooleanSetting<T extends SettingsRecord>(
     settings: Settings<T>,
     optionKey: BooleanOptionKeys<T>,
     label: string,
@@ -80,22 +81,22 @@ export function createBooleanSetting<T extends Record<string, unknown>>(
     const optionHtml = createDocumentFragment(`
         <div>
             <label for="${id}" class="input-group">
-                <input type="checkbox" id="${id}" ${settings._getBoolean(optionKey) ? 'checked' : ''} />
+                <input type="checkbox" id="${id}" ${settings.get(optionKey) ? 'checked' : ''} />
                 <span class="label-text">${label}</span>
             </label>
         </div>
     `);
     const checkbox: HTMLInputElement = optionHtml.querySelector(`input#${id}`)!;
     checkbox.addEventListener('change', () => {
-        settings._setBoolean(optionKey, checkbox.checked);
+        settings.set(optionKey, checkbox.checked);
     });
     settings.addCallback(optionKey, () => {
-        checkbox.checked = settings._getBoolean(optionKey);
+        checkbox.checked = settings.get(optionKey);
     });
     return optionHtml;
 }
 
-export function createNumberOption<T extends Record<string, unknown>>(
+export function createNumberOption<T extends SettingsRecord>(
     settings: Settings<T>,
     optionKey: NumberOptionKeys<T>,
     label: string,
@@ -106,7 +107,7 @@ export function createNumberOption<T extends Record<string, unknown>>(
         <div>
             <label for="${id}" class="input-group">
                 <span class="label-text">${label}:</span>
-                <input type="number" id="${id}" value="${settings._getNumber(optionKey)}" />
+                <input type="number" id="${id}" value="${settings.get(optionKey)}" />
             </label>
         </div>
     `);
@@ -130,12 +131,12 @@ export function createNumberOption<T extends Record<string, unknown>>(
         settings._setNumber(optionKey, value);
     });
     settings.addCallback(optionKey, () => {
-        input.value = settings._getNumber(optionKey).toString();
+        input.value = settings.get(optionKey).toString();
     });
     return optionHtml;
 }
 
-export function createStringSetting<T extends Record<string, unknown>>(
+export function createStringSetting<T extends SettingsRecord>(
     settings: Settings<T>,
     optionKey: StringOptionKeys<T>,
     label: string,
@@ -145,7 +146,7 @@ export function createStringSetting<T extends Record<string, unknown>>(
         <div>
             <label for="${id}" class="input-group">
                 <span class="label-text">${label}:</span>
-                <input type="text" id="${id}" class="fullwidth" value="${settings._getString(optionKey)}" />
+                <input type="text" id="${id}" class="fullwidth" value="${settings.get(optionKey)}" />
             </label>
         </div>
     `);
@@ -154,12 +155,12 @@ export function createStringSetting<T extends Record<string, unknown>>(
         settings._setString(optionKey, input.value);
     });
     settings.addCallback(optionKey, () => {
-        input.value = settings._getString(optionKey);
+        input.value = settings.get(optionKey);
     });
     return optionHtml;
 }
 
-export function createSelectSetting<T extends Record<string, unknown>>(
+export function createSelectSetting<T extends SettingsRecord>(
     settings: Settings<T>,
     optionKey: StringOptionKeys<T>,
     label: string,
@@ -183,12 +184,12 @@ export function createSelectSetting<T extends Record<string, unknown>>(
         }
         select.appendChild(optionElement);
     }
-    select.value = settings._getString(optionKey);
+    select.value = settings.get(optionKey);
     select.addEventListener('change', () => {
         settings._setString(optionKey, select.value);
     });
     settings.addCallback(optionKey, () => {
-        select.value = settings._getString(optionKey);
+        select.value = settings.get(optionKey);
     });
     return optionHtml;
 }
@@ -204,7 +205,7 @@ export function createSettingsButton(label: string, action: () => void): Documen
     return buttonHtml;
 }
 
-export function createSettingsResetButton(scriptSettings: Settings<Record<string, unknown>>[] = []): DocumentFragment {
+export function createSettingsResetButton(scriptSettings: Settings<SettingsRecord>[] = []): DocumentFragment {
     const globalSettings = getGlobalSettings();
     return createSettingsButton('Reset options', () => {
         globalSettings.reset();
