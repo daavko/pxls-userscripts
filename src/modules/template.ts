@@ -270,7 +270,7 @@ function getCellColor(
                     const g = (pixelColor >> 8) & 0xff;
                     const r = pixelColor & 0xff;
                     throw new Error(
-                        'Pixel block for downscaling has more than one color. If you have Firefox Enhanced Tracking Protection enabled, try disabling it for this site.',
+                        'Pixel block for downscaling has more than one color. If you have Firefox Enhanced Tracking Protection enabled, try disabling it for this site. If you are using Brave browser, try lowering the anti-fingerprinting protection level.',
                         { cause: { x, y, blockX, blockY, cellSize, previousR, previousG, previousB, r, g, b } },
                     );
                 }
