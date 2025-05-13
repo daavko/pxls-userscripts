@@ -1,5 +1,6 @@
 import { debug } from './debug';
-import { addStylesheet, createDocumentFragment } from './document';
+import { addStylesheet } from './document';
+import { el } from './html';
 import messageContainerStyle from './message.css';
 import { getScriptName } from './pxls-init';
 
@@ -27,17 +28,12 @@ export function showMessage(message: string, type: MessageType, duration: number
             throw new Error(`Unknown message type: ${type as string}`);
     }
 
-    const messageDiv = createDocumentFragment(`
-        <div class="dpus__message ${messageDivTypeClass}">${formatMessage(message)}</div>
-    `);
+    const messageDiv = el('div', { class: ['dpus__message', messageDivTypeClass] }, [formatMessage(message)]);
 
-    const messageDivChildren = Array.from(messageDiv.children);
     const messageContainer = getOrInitMessageContainer();
     messageContainer.appendChild(messageDiv);
     setTimeout(() => {
-        for (const child of messageDivChildren) {
-            messageContainer.removeChild(child);
-        }
+        messageContainer.removeChild(messageDiv);
     }, duration);
 }
 
@@ -79,9 +75,7 @@ function getOrInitMessageContainer(): Element {
 function createMessageContainer(): Element {
     addStylesheet('dpus__message-container', messageContainerStyle);
 
-    const messageContainer = createDocumentFragment(`
-        <div class="dpus__message-container"></div>
-    `).children[0];
+    const messageContainer = el('div', { class: 'dpus__message-container' });
     document.body.appendChild(messageContainer);
 
     return messageContainer;

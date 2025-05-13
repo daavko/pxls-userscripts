@@ -1,4 +1,5 @@
-import { addStylesheet, createDocumentFragment, createRandomElementId } from './document';
+import { addStylesheet, createRandomElementId } from './document';
+import { el } from './html';
 import { showErrorMessage } from './message';
 import { getDpusGlobal, getScriptId, getScriptName } from './pxls-init';
 import {
@@ -28,32 +29,22 @@ function createSettingsContainer(): Element {
 
     addStylesheet('dpus__settings-ui', settingsUiStyle);
 
-    const settingsContainer = createDocumentFragment(`<div class="dpus__settings-ui"></div>`).children[0];
+    const settingsContainer = el('div', { class: 'dpus__settings-ui' });
     optionsSidebar.appendChild(settingsContainer);
 
     return settingsContainer;
 }
 
-export function createSettingsUI(bodyCreationFn: () => DocumentFragment[]): void {
+export function createSettingsUI(bodyCreationFn: () => HTMLElement[]): void {
     const settingsContainer = getOrCreateSettingsContainer();
 
     const globalSettings = getGlobalSettings();
 
     const scriptIndex = getDpusGlobal().scripts.indexOf(getScriptId());
-    const optionsHtml = createDocumentFragment(`
-        <article style="order: ${scriptIndex};">
-            <header>
-                <h3>${getScriptName()}</h3>
-            </header>
-            <div class="pad-wrapper">
-                <section></section>
-            </div>
-        </article>
-    `);
 
-    const header = optionsHtml.querySelector('header')!;
-    const container = optionsHtml.querySelector('div.pad-wrapper')!;
-    const section = optionsHtml.querySelector('div.pad-wrapper > section')!;
+    const header = el('header', [el('h3', [getScriptName()])]);
+    const section = el('section', []);
+    const container = el('div', { class: 'pad-wrapper' }, [section]);
 
     header.addEventListener('click', () => {
         container.classList.toggle('hidden');
@@ -67,32 +58,31 @@ export function createSettingsUI(bodyCreationFn: () => DocumentFragment[]): void
     for (const option of options) {
         section.appendChild(option);
     }
-
-    settingsContainer.appendChild(optionsHtml);
+    settingsContainer.appendChild(el('article', { style: { order: `${scriptIndex}` } }, [header, container]));
 }
 
 export function createBooleanSetting<T extends Record<string, unknown>>(
     settings: Settings<T>,
     optionKey: BooleanOptionKeys<T>,
     label: string,
-): DocumentFragment {
+): HTMLElement {
     const id = createRandomElementId();
-    const optionHtml = createDocumentFragment(`
-        <div>
-            <label for="${id}" class="input-group">
-                <input type="checkbox" id="${id}" ${settings._getBoolean(optionKey) ? 'checked' : ''} />
-                <span class="label-text">${label}</span>
-            </label>
-        </div>
-    `);
-    const checkbox: HTMLInputElement = optionHtml.querySelector(`input#${id}`)!;
+    const checkbox = el('input', {
+        id,
+        attributes: { type: 'checkbox', checked: settings._getBoolean(optionKey) },
+    });
     checkbox.addEventListener('change', () => {
         settings._setBoolean(optionKey, checkbox.checked);
     });
     settings.addCallback(optionKey, () => {
         checkbox.checked = settings._getBoolean(optionKey);
     });
-    return optionHtml;
+    return el('div', [
+        el('label', { class: 'input-group', attributes: { for: id } }, [
+            checkbox,
+            el('span', { class: 'label-text' }, [label]),
+        ]),
+    ]);
 }
 
 export function createNumberOption<T extends Record<string, unknown>>(
@@ -100,25 +90,14 @@ export function createNumberOption<T extends Record<string, unknown>>(
     optionKey: NumberOptionKeys<T>,
     label: string,
     range?: { min?: number; max?: number },
-): DocumentFragment {
+): HTMLElement {
     const id = createRandomElementId();
-    const optionHtml = createDocumentFragment(`
-        <div>
-            <label for="${id}" class="input-group">
-                <span class="label-text">${label}:</span>
-                <input type="number" id="${id}" value="${settings._getNumber(optionKey)}" />
-            </label>
-        </div>
-    `);
-    const input: HTMLInputElement = optionHtml.querySelector(`input#${id}`)!;
     const rangeMin = range?.min;
     const rangeMax = range?.max;
-    if (rangeMin != null) {
-        input.min = rangeMin.toString();
-    }
-    if (rangeMax != null) {
-        input.max = rangeMax.toString();
-    }
+    const input = el('input', {
+        id,
+        attributes: { type: 'number', value: settings._getNumber(optionKey), min: rangeMin, max: rangeMax },
+    });
     input.addEventListener('change', () => {
         const value = parseFloat(input.value);
         if (rangeMin != null && value < rangeMin) {
@@ -132,31 +111,37 @@ export function createNumberOption<T extends Record<string, unknown>>(
     settings.addCallback(optionKey, () => {
         input.value = settings._getNumber(optionKey).toString();
     });
-    return optionHtml;
+    return el('div', [
+        el('label', { class: 'input-group', attributes: { for: id } }, [
+            el('span', { class: 'label-text' }, [label]),
+            input,
+        ]),
+    ]);
 }
 
 export function createStringSetting<T extends Record<string, unknown>>(
     settings: Settings<T>,
     optionKey: StringOptionKeys<T>,
     label: string,
-): DocumentFragment {
+): HTMLElement {
     const id = createRandomElementId();
-    const optionHtml = createDocumentFragment(`
-        <div>
-            <label for="${id}" class="input-group">
-                <span class="label-text">${label}:</span>
-                <input type="text" id="${id}" class="fullwidth" value="${settings._getString(optionKey)}" />
-            </label>
-        </div>
-    `);
-    const input: HTMLInputElement = optionHtml.querySelector(`input#${id}`)!;
+    const input = el('input', {
+        class: 'fullwidth',
+        id,
+        attributes: { type: 'text', value: settings._getString(optionKey) },
+    });
     input.addEventListener('change', () => {
         settings._setString(optionKey, input.value);
     });
     settings.addCallback(optionKey, () => {
         input.value = settings._getString(optionKey);
     });
-    return optionHtml;
+    return el('div', [
+        el('label', { class: 'input-group', attributes: { for: id } }, [
+            el('span', { class: 'label-text' }, [label]),
+            input,
+        ]),
+    ]);
 }
 
 export function createSelectSetting<T extends Record<string, unknown>>(
@@ -164,25 +149,15 @@ export function createSelectSetting<T extends Record<string, unknown>>(
     optionKey: StringOptionKeys<T>,
     label: string,
     options: { value: string; label: string; title?: string }[],
-): DocumentFragment {
+): HTMLElement {
     const id = createRandomElementId();
-    const optionHtml = createDocumentFragment(`
-        <div>
-            <label for="${id}" class="input-group">
-                <span class="label-text">${label}:</span>
-                <select id="${id}"></select>
-            </label>
-        </div>
-    `);
-    const select: HTMLSelectElement = optionHtml.querySelector(`select#${id}`)!;
-    for (const option of options) {
-        const optionElement = createDocumentFragment(`<option value="${option.value}">${option.label}</option>`)
-            .children[0];
-        if (option.title != null) {
-            optionElement.setAttribute('title', option.title);
-        }
-        select.appendChild(optionElement);
-    }
+    const select = el(
+        'select',
+        { id },
+        options.map((option) =>
+            el('option', { attributes: { value: option.value, title: option.title } }, [option.label]),
+        ),
+    );
     select.value = settings._getString(optionKey);
     select.addEventListener('change', () => {
         settings._setString(optionKey, select.value);
@@ -190,21 +165,22 @@ export function createSelectSetting<T extends Record<string, unknown>>(
     settings.addCallback(optionKey, () => {
         select.value = settings._getString(optionKey);
     });
-    return optionHtml;
+    return el('div', [
+        el('label', { class: 'input-group', attributes: { for: id } }, [
+            el('span', { class: 'label-text' }, [label]),
+            select,
+        ]),
+    ]);
 }
 
-export function createSettingsButton(label: string, action: () => void): DocumentFragment {
-    const buttonHtml = createDocumentFragment(`
-        <div>
-            <button class="text-button">${label}</button>
-        </div>
-    `);
-    const button = buttonHtml.querySelector('button')!;
+export function createSettingsButton(label: string, action: () => void): HTMLElement {
+    const button = el('button', { class: 'text-button' }, [label]);
     button.addEventListener('click', action);
-    return buttonHtml;
+
+    return el('div', [button]);
 }
 
-export function createSettingsResetButton(scriptSettings: Settings<Record<string, unknown>>[] = []): DocumentFragment {
+export function createSettingsResetButton(scriptSettings: Settings<Record<string, unknown>>[] = []): HTMLElement {
     const globalSettings = getGlobalSettings();
     return createSettingsButton('Reset options', () => {
         globalSettings.reset();
@@ -214,18 +190,18 @@ export function createSettingsResetButton(scriptSettings: Settings<Record<string
     });
 }
 
-export function createSettingsText(text: string): DocumentFragment {
-    return createDocumentFragment(`<p>${text}</p>`);
+export function createSettingsText(text: string): HTMLElement {
+    return el('p', [text]);
 }
 
-export function createSubheading(text: string): DocumentFragment {
-    return createDocumentFragment(`<h4>${text}</h4>`);
+export function createSubheading(text: string): HTMLElement {
+    return el('h4', [text]);
 }
 
-export function createKeyboardShortcutText(key: string, text: string): DocumentFragment {
-    return createDocumentFragment(`<p><kbd>${key}</kbd> - ${text}</p>`);
+export function createKeyboardShortcutText(key: string, text: string): HTMLElement {
+    return el('p', [el('kbd', [key]), ` - ${text}`]);
 }
 
-export function createLineBreak(): DocumentFragment {
-    return createDocumentFragment('<br>');
+export function createLineBreak(): HTMLElement {
+    return el('br');
 }

@@ -1,4 +1,5 @@
-import { addStylesheet, createDocumentFragment } from './document';
+import { addStylesheet } from './document';
+import { el, svgEl } from './html';
 import infoIconStyle from './info-icon.css';
 import { getScriptName } from './pxls-init';
 import { getPxlsUITopUI } from './pxls-ui';
@@ -79,14 +80,9 @@ export function createInfoIcon<const T extends InfoIconState[]>(
     pathData: string,
     options?: Partial<InfoIconOptions<T>>,
 ): InfoIcon<T> {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-    const svg = createDocumentFragment(`
-        <div class="dpus__info-icon">
-            <svg viewBox="0 0 24 24">
-                <path d="${pathData}" />
-            </svg>
-        </div>
-    `).children[0] as HTMLElement;
+    const svg = el('div', { class: 'dpus__info-icon' }, [
+        svgEl('svg', { attributes: { viewBox: '0 0 24 24' } }, [svgEl('path', { attributes: { d: pathData } })]),
+    ]);
     getOrInitInfoIconsContainer().appendChild(svg);
     return new InfoIcon(svg, options);
 }
@@ -108,7 +104,7 @@ export function getOrInitInfoIconsContainer(): Element {
 function createInfoIconContainer(): Element {
     addStylesheet('dpus__info-icons', infoIconStyle);
 
-    const infoIconsContainer = createDocumentFragment(`<div class="dpus__info-icons"></div>`).children[0];
+    const infoIconsContainer = el('div', { class: 'dpus__info-icons' });
     getPxlsUITopUI().appendChild(infoIconsContainer);
 
     return infoIconsContainer;
