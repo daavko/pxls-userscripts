@@ -2,7 +2,8 @@ import { mdiMapMarkerAlertOutline, mdiMapMarkerRemoveVariant } from '@mdi/js';
 import type { InferOutput } from 'valibot';
 import * as v from 'valibot';
 import { debug, debugTime } from '../modules/debug';
-import { addStylesheet, createDocumentFragment } from '../modules/document';
+import { addStylesheet } from '../modules/document';
+import { el } from '../modules/html';
 import { createInfoIcon, InfoIcon, type InfoIconOptions, type InfoIconState } from '../modules/info-icon';
 import { showErrorMessage } from '../modules/message';
 import { globalInit, waitForApp } from '../modules/pxls-init';
@@ -165,7 +166,7 @@ let heatmapTimerId: number | null = null;
 let detemplatizedTemplate: ImageData | null = null;
 let detemplatizedTemplateUint32View: Uint32Array | null = null;
 
-const griefListContainer = createDocumentFragment(`<div class="dpus__grief-tracker"></div>`).children[0];
+const griefListContainer = el('div', { class: 'dpus__grief-tracker' });
 const griefList = new Map<string, Element>();
 
 const infoIconStates = [
@@ -295,10 +296,10 @@ function coordToMapKey(x: number, y: number): string {
 }
 
 function createGriefHighlightElement(x: number, y: number): HTMLElement {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-    return createDocumentFragment(
-        `<div class="dpus__grief-tracker-grief" style="--dpus--grief-coord-x: ${x}; --dpus--grief-coord-y: ${y}"></div>`,
-    ).children[0] as HTMLElement;
+    return el('div', {
+        class: 'dpus__grief-tracker-grief',
+        styleCustomProperties: { '--dpus--grief-coord-x': `${x}`, '--dpus--grief-coord-y': `${y}` },
+    });
 }
 
 function addGriefs(griefs: [number, number][]): void {
