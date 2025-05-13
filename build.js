@@ -74,7 +74,7 @@ const cssMinifyPlugin = {
                 write: false,
             });
             return {
-                contents: css.outputFiles[0].text,
+                contents: css.outputFiles[0].text.trim(),
                 loader: 'text',
             };
         });
