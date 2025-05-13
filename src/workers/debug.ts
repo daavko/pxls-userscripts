@@ -1,26 +1,35 @@
-import * as v from 'valibot';
+import { getWorkerDebugEnabled, getWorkerScriptName } from './init';
 
-const initMessageSchema = v.pipe(
-    v.string(),
-    v.rawTransform(({ dataset, addIssue, NEVER }) => {
-        try {
-            return JSON.parse(dataset.value) as unknown;
-        } catch (e) {
-            addIssue({ message: 'unable to parse JSON: ' + String(e) });
-            return NEVER;
-        }
-    }),
-    v.object({
-        type: v.literal('init'),
-        enableDebug: v.boolean(),
-    }),
-);
+function debugName(): string {
+    return `[${getWorkerScriptName()}]`;
+}
 
-export function bindInitEvent(): void {
-    globalThis.addEventListener('message', ({ data }) => {
-        const { success, output: initMessage } = v.safeParse(initMessageSchema, data);
-        if (success) {
-            const { enableDebug } = initMessage;
-        }
-    });
+export function workerDebug(message: string, ...data: unknown[]): void {
+    if (getWorkerDebugEnabled()) {
+        console.debug(debugName(), message, ...data);
+    }
+}
+
+export interface WorkerDebugTimer {
+    stop(): void;
+    mark(message: string): void;
+}
+
+export function workerDebugTime(timerName: string): WorkerDebugTimer | null {
+    const timerNameWithId = `${timerName} (${globalThis.crypto.randomUUID()})`;
+    const fullTimingName = `${debugName()} ${timerNameWithId}`;
+    if (getWorkerDebugEnabled()) {
+        workerDebug(`${timerNameWithId} timer started`);
+        console.time(fullTimingName);
+        return {
+            stop: (): void => {
+                console.timeEnd(fullTimingName);
+            },
+            mark: (msg): void => {
+                console.timeLog(fullTimingName, msg);
+            },
+        };
+    } else {
+        return null;
+    }
 }

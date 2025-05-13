@@ -17,7 +17,7 @@ import {
     createSettingsUI,
     createSubheading,
 } from '../modules/settings-ui';
-import { detemplatizeImageWorker, getTemplateImage } from '../modules/template';
+import { detemplatizeImage, getTemplateImage } from '../modules/template';
 import type { NonNullableKeys } from '../util/types';
 
 globalInit({ scriptId: 'templateColorAutoselector', scriptName: 'Template color autoselector' });
@@ -298,7 +298,7 @@ function templateChanged(template: TemplateData): void {
     getTemplateImage()
         .then(async (imageData) => {
             debug('Template image loaded');
-            return detemplatizeImageWorker(imageData, width);
+            return detemplatizeImage(imageData, width);
         })
         .then((detemplatizedImageData) => {
             debug('Template image detemplatized');
