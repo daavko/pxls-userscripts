@@ -61,8 +61,21 @@ export const pxlsInfoResponseSchema = v.object({
     chatDefaultExternalLinkPopup: v.boolean(),
 });
 
+export const pxlsLookupResponseSchema = v.object({
+    id: v.number(),
+    x: v.number(),
+    y: v.number(),
+    pixelCount: v.number(),
+    pixelCountAlltime: v.number(),
+    time: v.number(),
+    username: v.string(),
+    discordName: v.string(),
+    faction: v.string(),
+});
+
 export type PxlsInfoResponse = InferOutput<typeof pxlsInfoResponseSchema>;
 export type PxlsInfoAuthService = InferOutput<typeof pxlsInfoAuthServiceSchema>;
 export type PxlsInfoCustomEmoji = InferOutput<typeof pxlsInfoCustomEmojiSchema>;
 export type PxlsInfoPaletteItem = InferOutput<typeof pxlsInfoPaletteItemSchema>;
 export type PxlsInfoCooldownInfo = InferOutput<typeof pxlsInfoCooldownInfoSchema>;
+export type PxlsLookupResponse = InferOutput<typeof pxlsLookupResponseSchema>;
