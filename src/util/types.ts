@@ -6,3 +6,7 @@ export type NonNullableKeys<T> = {
 export type NullableKeys<T> = {
     [K in keyof T]: T[K] | null;
 };
+
+export type NullishKeys<T> = {
+    [K in keyof T]?: T[K] | null | undefined;
+};
