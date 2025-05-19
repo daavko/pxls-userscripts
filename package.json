@@ -10,7 +10,8 @@
         "typecheck": "tsc --noEmit",
         "build-color-selector": "node build.js src/scripts/auto-color-selector.user.ts",
         "build-grief-tracker": "node build.js src/scripts/grief-tracker.user.ts",
-        "build-milestone-watcher": "node build.js src/scripts/milestone-watcher.user.ts"
+        "build-milestone-watcher": "node build.js src/scripts/milestone-watcher.user.ts",
+        "build-module-replacer": "node build.js src/scripts/module-replacer.user.ts"
     },
     "devDependencies": {
         "@eslint-community/eslint-plugin-eslint-comments": "^4.4.1",
@@ -29,6 +30,7 @@
     "sideEffects": false,
     "dependencies": {
         "@mdi/js": "^7.4.47",
+        "acorn": "^8.14.1",
         "valibot": "^1.0.0"
     }
 }
