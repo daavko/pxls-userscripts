@@ -64,8 +64,8 @@ export function registerModuleReplacement<T extends keyof PxlsModules>(
     if (existingReplacement) {
         throw new Error(`Module replacement for index ${replacement.moduleName} already registered`);
     }
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-    dpusModuleReplacement.replacements.push(replacement as ModuleReplacement);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- we're doing stuff that types really can't handle
+    dpusModuleReplacement.replacements.push(replacement as unknown as ModuleReplacement);
     debug('registered module replacement', replacement.moduleName, expectedJsHash);
 }
 
@@ -79,7 +79,7 @@ const jsLoadObserver = new MutationObserver((mutations) => {
         if (scriptSrc === location.origin + '/pxls.js') {
             debug('found pxls.js script node');
             node.addEventListener('load', () => {
-                // somehow the node loaded even though we changed the type, throw an error
+                // todo: somehow the node loaded even though we changed the type, throw an error
             });
             node.type = 'none/blocked';
         }
