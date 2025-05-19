@@ -59,6 +59,7 @@ export const pxlsInfoResponseSchema = v.object({
     chatLinkMinimumPixelCount: v.number(),
     chatLinkSendToStaff: v.boolean(),
     chatDefaultExternalLinkPopup: v.boolean(),
+    captchaKey: v.nullish(v.string()),
 });
 
 export const pxlsLookupResponseSchema = v.object({

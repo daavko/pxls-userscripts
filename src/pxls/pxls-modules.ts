@@ -1,3 +1,4 @@
+import type { NullishKeys } from '../util/types';
 import type { PxlsInfoResponse, PxlsLookupResponse } from './pxls-types';
 
 export interface PxlsModules {
@@ -20,11 +21,11 @@ export interface PxlsModules {
 }
 
 export interface PxlsModulesImportMap {
-    './board': PxlsBoardModule;
-    './chat': PxlsChatModule;
-    './chromeOffsetWorkaround': PxlsChromeOffsetWorkaroundModule;
-    './coords': PxlsCoordsModule;
-    './grid': PxlsGridModule;
+    './board': { board: PxlsBoardModule };
+    './chat': { chat: PxlsChatModule };
+    './chromeOffsetWorkaround': { chromeOffsetWorkaround: PxlsChromeOffsetWorkaroundModule };
+    './coords': { coords: PxlsCoordsModule };
+    './grid': { grid: PxlsGridModule };
     './helpers': {
         binaryAjax: (url: string) => Promise<Uint8Array>;
         createImageData: (width: number, height: number) => ImageData;
@@ -39,22 +40,22 @@ export interface PxlsModulesImportMap {
             haveImageRendering: boolean;
         };
     };
-    './lookup': PxlsLookupModule;
-    './overlays': PxlsOverlaysModule;
-    './panels': PxlsPanelsModule;
-    './place': PxlsPlaceModule;
-    './query': PxlsQueryModule;
-    './settings': PxlsSettingsModule;
-    './socket': PxlsSocketModule;
+    './lookup': { lookup: PxlsLookupModule };
+    './overlays': { overlays: PxlsOverlaysModule };
+    './panels': { panels: PxlsPanelsModule };
+    './place': { place: PxlsPlaceModule };
+    './query': { query: PxlsQueryModule };
+    './settings': { settings: PxlsSettingsModule };
+    './socket': { socket: PxlsSocketModule };
     './storage': {
         getCookie: (name: string) => string | undefined;
         setCookie: (name: string, value: string, days?: number) => void;
         ls: PxlsStorageModule;
         ss: PxlsStorageModule;
     };
-    './template': PxlsTemplateModule;
-    './uiHelper': PxlsUiHelperModule;
-    './user': PxlsUserModule;
+    './template': { template: PxlsTemplateModule };
+    './uiHelper': { uiHelper: PxlsUiHelperModule };
+    './user': { user: PxlsUserModule };
 }
 
 export interface PxlsBoardModule {
@@ -69,7 +70,7 @@ export interface PxlsBoardModule {
     fromScreen: (screenX: number, screenY: number, floored?: boolean) => { x: number; y: number };
     toScreen: (boardX: number, boardY: number) => { x: number; y: number };
     save: () => void;
-    centerOn: (x: number, y: number, ignoreLock?: boolean) => void;
+    centerOn: (x?: number | null, y?: number | null, ignoreLock?: boolean) => void;
     getRenderBoard: () => HTMLCanvasElement;
     getContainer: () => HTMLElement;
     getWidth: () => number;
@@ -391,7 +392,7 @@ export interface PxlsTemplateModule {
     draw: (ctx: CanvasRenderingContext2D, x: number, y: number) => void;
     init: () => void;
     webinit: (data: PxlsInfoResponse) => void;
-    queueUpdate: (templateObj: PxlsAppTemplateObject) => void;
+    queueUpdate: (templateObj: NullishKeys<PxlsAppTemplateObject>) => void;
     getOptions: () => PxlsAppTemplateObject;
     setPixelated: (pixelate?: boolean) => void;
     getDisplayWidth: () => number;
@@ -517,11 +518,13 @@ export interface PxlsAppSetting<SettingType extends PxlsAppSettingType> {
         disable: () => void;
         enable: () => void;
     };
+    toggle: () => void;
 }
 
 export type PxlsAppTemplateConvertMode = 'unconverted' | 'nearestCustom';
 
 export interface PxlsAppTemplateObject {
+    use?: boolean;
     width: number;
     x: number;
     y: number;
