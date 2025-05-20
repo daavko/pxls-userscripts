@@ -4,15 +4,6 @@ import type { NonNullableKeys } from '../util/types';
 import { showErrorMessage } from './message';
 import { getScriptId } from './pxls-init';
 
-const SETTINGS_SYNC_CHANNEL_NAME = 'dpus:settings:sync';
-
-const settingsSyncMessageSchema = v.object({
-    type: v.literal('settingsSync'),
-    storageKey: v.string(),
-    newValue: v.unknown(),
-});
-type SettingsSyncMessage = InferOutput<typeof settingsSyncMessageSchema>;
-
 export type BooleanOption<T extends Record<string, unknown>, K extends keyof T> = T[K] extends boolean ? T[K] : never;
 export type NumberOption<T extends Record<string, unknown>, K extends keyof T> = T[K] extends number ? T[K] : never;
 export type StringOption<T extends Record<string, unknown>, K extends keyof T> = T[K] extends string ? T[K] : never;
@@ -34,8 +25,6 @@ export type OptionValueUpdateCallbackMap<T extends Record<string, unknown>> = {
 export class Settings<const TSettings extends Record<string, unknown>> {
     private currentValue: TSettings;
 
-    private readonly syncChannel = new BroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME);
-
     constructor(
         private readonly storageKey: string,
         private readonly schema: GenericSchema<unknown, Partial<TSettings>>,
@@ -44,32 +33,34 @@ export class Settings<const TSettings extends Record<string, unknown>> {
     ) {
         this.currentValue = this.init();
 
-        this.syncChannel.addEventListener('message', (event) => {
-            const parsedMessage = v.safeParse(settingsSyncMessageSchema, event.data);
-
-            if (!parsedMessage.success) {
+        window.addEventListener('storage', (event) => {
+            if (event.key !== this.storageKey || event.newValue == null) {
                 return;
             }
 
-            const { type, storageKey: messageStorageKey, newValue: newValueRaw } = parsedMessage.output;
+            let parsedJson: unknown;
+            try {
+                parsedJson = JSON.parse(event.newValue);
+            } catch (e) {
+                console.error(e);
+                return;
+            }
 
-            const parsedNewValue = v.safeParse(this.schema, newValueRaw);
+            const parsedNewValue = v.safeParse(this.schema, parsedJson);
             if (!parsedNewValue.success) {
                 return;
             }
 
             const newValue = { ...this.defaultValue, ...parsedNewValue.output };
-            if (type === 'settingsSync' && messageStorageKey === this.storageKey) {
-                const previousValue = this.currentValue;
-                this.currentValue = newValue;
-                for (const [key, value] of Object.entries(this.currentValue)) {
-                    const callbacks = this.optionValueUpdateCallbacks[key as keyof TSettings];
-                    const oldValue = previousValue[key as keyof TSettings];
-                    if (callbacks != null) {
-                        for (const callback of callbacks) {
-                            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-                            callback(oldValue, value as TSettings[typeof key]);
-                        }
+            const previousValue = this.currentValue;
+            this.currentValue = newValue;
+            for (const [key, value] of Object.entries(this.currentValue)) {
+                const callbacks = this.optionValueUpdateCallbacks[key as keyof TSettings];
+                const oldValue = previousValue[key as keyof TSettings];
+                if (callbacks != null) {
+                    for (const callback of callbacks) {
+                        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
+                        callback(oldValue, value as TSettings[typeof key]);
                     }
                 }
             }
@@ -196,11 +187,6 @@ export class Settings<const TSettings extends Record<string, unknown>> {
             storedValue[key] = value;
         }
         localStorage.setItem(this.storageKey, JSON.stringify(storedValue));
-        this.syncChannel.postMessage({
-            type: 'settingsSync',
-            storageKey: this.storageKey,
-            newValue: storedValue,
-        } satisfies SettingsSyncMessage);
     }
 }
 
