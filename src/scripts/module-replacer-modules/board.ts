@@ -1,11 +1,27 @@
 import type { PxlsAppTemplateConvertMode, PxlsBoardModule } from '../../pxls/pxls-modules';
-import type { PxlsInfoPaletteItem, PxlsInfoResponse } from '../../pxls/pxls-types';
-import type { ModuleReplacementFunction } from './types';
+import type { PxlsInfoResponse } from '../../pxls/pxls-types';
+import fragmentShaderSource from './board.frag';
+import vertexShaderSource from './board.vert';
+import type { ModuleImportFunction, ModuleReplacementFunction } from './types';
+
+export declare const myAwesomeRequire: ModuleImportFunction;
+
+interface BufferedPixel {
+    x: number;
+    y: number;
+    color: number;
+}
+
+// todo:
+// - change this thing to be an IIFE instead of an exported function, that way we can use esbuild to bundle it beforehand
+// - requireFn and moduleExport will be used as "global" variables (in reality they will be variables in the surrounding code)
+// - module replacement code will get a liiiiiiiiiittle bit simpler, maybe? hopefully... actually maybe not, Iunno yet
 
 export const boardModuleFn: ModuleReplacementFunction<'board'> = (requireFn, moduleExport) => {
     'use strict';
 
-    const { settings } = requireFn('./settings');
+    // const { settings } = requireFn('./settings');
+    const { settings } = myAwesomeRequire('./settings');
     const { panels } = requireFn('./panels');
     const { socket } = requireFn('./socket');
     const { lookup } = requireFn('./lookup');
@@ -17,10 +33,13 @@ export const boardModuleFn: ModuleReplacementFunction<'board'> = (requireFn, mod
     const { chat } = requireFn('./chat');
     const { query } = requireFn('./query');
     const { ls } = requireFn('./storage');
+    const { grid } = requireFn('./grid');
 
     let loaded = false;
+    let allowDrag = true;
 
     const board = {
+        _canvas: document.createElement('canvas'),
         _imageData: null as ImageData | null,
         _int32View: null as Int32Array | null,
         _imageUpdatedSinceLastRender: false,
@@ -30,6 +49,9 @@ export const boardModuleFn: ModuleReplacementFunction<'board'> = (requireFn, mod
         _initializedSize: false,
         _width: 1,
         _height: 1,
+        get canvas(): HTMLCanvasElement {
+            return board._canvas;
+        },
         get imageData(): ImageData | null {
             return board._imageData;
         },
@@ -118,45 +140,133 @@ export const boardModuleFn: ModuleReplacementFunction<'board'> = (requireFn, mod
             board._int32View = new Int32Array(board._imageData.data.buffer);
             board._initializedSize = true;
         },
-        setPixel(x: number, y: number, color: number): void {
+        setPixel(x: number, y: number, color: number, colorMode: 'index' | 'rgba'): void {
             if (board._int32View == null || x < 0 || x >= board.width || y < 0 || y >= board.height) {
                 return;
             }
             x = Math.floor(x);
             y = Math.floor(y);
-            board._int32View[y * board.width + x] = color;
+            board.setPixelIndex(y * board.width + x, color, colorMode);
+        },
+        setPixelIndex(pixelIndex: number, colorOrIndex: number, colorMode: 'index' | 'rgba'): void {
+            if (board._int32View == null || pixelIndex < 0 || pixelIndex >= board.width * board.height) {
+                return;
+            }
+
+            let color: number;
+            switch (colorMode) {
+                case 'index': {
+                    const maybeColor = paletteRgbNumbers.at(colorOrIndex);
+                    if (maybeColor == null) {
+                        return;
+                    }
+                    color = maybeColor;
+                    break;
+                }
+                case 'rgba': {
+                    color = colorOrIndex;
+                }
+            }
+
+            board._int32View[pixelIndex] = color;
             board._imageUpdatedSinceLastRender = true;
+        },
+        insertCanvasIntoDom(): void {},
+    };
+
+    const webGlRenderer = {
+        _context: null as WebGL2RenderingContext | null,
+        _program: null as WebGLProgram | null,
+        init(): void {
+            const canvas = board.canvas;
+            const gl = canvas.getContext('webgl2', {
+                antialias: false,
+                alpha: true,
+                depth: false,
+                stencil: false,
+                premultipliedAlpha: false,
+                preserveDrawingBuffer: true,
+            });
+            if (gl == null) {
+                throw new Error('Failed to create WebGL context');
+            }
+            const vertexShader = webGlRenderer.compileShader(gl, vertexShaderSource, gl.VERTEX_SHADER);
+            const fragmentShader = webGlRenderer.compileShader(gl, fragmentShaderSource, gl.FRAGMENT_SHADER);
+            const program = webGlRenderer.createProgram(gl, vertexShader, fragmentShader);
+
+            webGlRenderer._context = gl;
+            webGlRenderer._program = program;
+        },
+        compileShader(
+            gl: WebGL2RenderingContext,
+            source: string,
+            shaderType: WebGL2RenderingContext['VERTEX_SHADER'] | WebGL2RenderingContext['FRAGMENT_SHADER'],
+        ): WebGLShader {
+            const shader = gl.createShader(shaderType);
+            if (shader == null) {
+                throw new Error('Failed to create shader');
+            }
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
+            const success = gl.getShaderParameter(shader, gl.COMPILE_STATUS) as boolean;
+            if (success) {
+                return shader;
+            } else {
+                const info = gl.getShaderInfoLog(shader);
+                gl.deleteShader(shader);
+                throw new Error('Failed to compile shader', { cause: info });
+            }
+        },
+        createProgram(
+            gl: WebGL2RenderingContext,
+            vertexShader: WebGLShader,
+            fragmentShader: WebGLShader,
+        ): WebGLProgram {
+            const program = gl.createProgram();
+
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+
+            gl.linkProgram(program);
+
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
+            const success = gl.getProgramParameter(program, gl.LINK_STATUS) as boolean;
+
+            if (success) {
+                return program;
+            } else {
+                const info = gl.getProgramInfoLog(program);
+                gl.deleteProgram(program);
+                throw new Error('Failed to link program', { cause: info });
+            }
         },
     };
 
     const paletteRgbNumbers: number[] = [];
 
-    const fillPalette = (palette: PxlsInfoPaletteItem[]): void => {
-        paletteRgbNumbers.length = 0;
-        for (const item of palette) {
-            const hexColor = item.value.replace('#', '').toLowerCase();
-            const r = parseInt(hexColor.slice(0, 2), 16);
-            const g = parseInt(hexColor.slice(2, 4), 16);
-            const b = parseInt(hexColor.slice(4, 6), 16);
-            const abgr = 0xff000000 | (b << 16) | (g << 8) | r;
-            paletteRgbNumbers.push(abgr);
-        }
-    };
-
-    const pixelReplay = [];
+    const pixelReplay: BufferedPixel[] = [];
 
     let webInfo: PxlsInfoResponse | false = false;
 
-    const save = (): void => {
-        // todo: create canvas blob + url
+    const save = async (): Promise<void> => {
+        const canvas = new OffscreenCanvas(board.width, board.height);
+        const ctx = canvas.getContext('2d');
+        if (ctx == null) {
+            throw new Error('Failed to create OffscreenCanvas context');
+        }
+        ctx.putImageData(board.imageData!, 0, 0);
+        const blob = await canvas.convertToBlob({ type: 'image/png' });
+        const url = URL.createObjectURL(blob);
 
         const a = document.createElement('a');
         const now = new Date();
         const pad = (num: number): string => String(num).padStart(2, '0');
         a.download = `pxls canvas ${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}.${pad(now.getUTCMinutes())}.${pad(now.getUTCSeconds())}.png`;
-        a.href = ''; // todo: blob URL
+        a.href = url;
         a.click();
-        // todo: revoke blob URL
+        URL.revokeObjectURL(url);
     };
 
     const initInteraction = (): void => {
@@ -260,7 +370,7 @@ export const boardModuleFn: ModuleReplacementFunction<'board'> = (requireFn, mod
                     template.queueUpdate({ title: newValue ?? '' });
                     break;
                 case 'convert':
-                    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe... probably
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- original code does this
                     template.queueUpdate({ convertMode: newValue as PxlsAppTemplateConvertMode });
                     break;
             }
@@ -270,10 +380,28 @@ export const boardModuleFn: ModuleReplacementFunction<'board'> = (requireFn, mod
         initInteraction();
     };
 
+    const drawBoard = async (): Promise<void> => {
+        const boardDataResponse = await fetch('/boarddata');
+        const boardData = await boardDataResponse.bytes();
+
+        paletteRgbNumbers.push(...place.getPaletteABGR());
+
+        for (let i = 0; i < boardData.length; i++) {
+            board.setPixelIndex(i, boardData[i], 'index');
+        }
+
+        boardExport.update(false);
+        loaded = true;
+        for (const pixel of pixelReplay) {
+            board.setPixel(pixel.x, pixel.y, pixel.color, 'index');
+        }
+        pixelReplay.length = 0;
+    };
+
     const start = (): void => {
         fetch('/info')
             .then(async (response) => {
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- original code does this
                 const data = (await response.json()) as PxlsInfoResponse;
                 webInfo = data;
                 lookup.webinit();
@@ -303,14 +431,14 @@ export const boardModuleFn: ModuleReplacementFunction<'board'> = (requireFn, mod
                         width: parseFloat(query.get('tw') ?? '0'),
                         title: query.get('title') ?? '',
                         url: templateUrl,
-                        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe... probably
+                        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- original code does this
                         convertMode: (query.get('convert') as PxlsAppTemplateConvertMode) ?? 'nearestCustom',
                     });
                 }
 
                 const colorIndex = ls.get('color');
                 if (colorIndex != null) {
-                    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- probably safe
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- original code does this
                     place.switch(parseInt(colorIndex as string));
                 }
 
@@ -327,10 +455,30 @@ export const boardModuleFn: ModuleReplacementFunction<'board'> = (requireFn, mod
             });
     };
 
+    const update = (optional: boolean): boolean => {
+        if (loaded) {
+            query.set({
+                x: board.panX.toString(),
+                y: board.panY.toString(),
+                scale: board.scale.toString(),
+            });
+        }
+
+        if (optional) {
+            return false;
+        }
+
+        // todo: set stuff to be pixelated if scale is above 1 (this is actually done in the fragment shader now so just remember to do it)
+
+        place.update();
+        grid.update();
+        return true;
+    };
+
     const boardExport: PxlsBoardModule = {
         init,
         start,
-        update: (optional, ignoreCanvasLock = false): boolean => {},
+        update,
         getScale: (): number => {
             return board.scale;
         },
@@ -363,7 +511,7 @@ export const boardModuleFn: ModuleReplacementFunction<'board'> = (requireFn, mod
         },
         setPixelIndex: (x, y, color, refresh = true): void => {
             if (!loaded || board.int32View == null) {
-                // todo push to buffer
+                pixelReplay.push({ x, y, color });
                 return;
             }
 
@@ -378,14 +526,22 @@ export const boardModuleFn: ModuleReplacementFunction<'board'> = (requireFn, mod
                 return;
             }
 
-            board.setPixel(x, y, colorRgb);
+            board.setPixel(x, y, colorRgb, 'rgba');
             if (refresh) {
                 boardExport.update(false);
             }
         },
-        fromScreen: (screenX, screenY, floored = true): { x: number; y: number } => {},
-        toScreen: (boardX, boardY): { x: number; y: number } => {},
-        save,
+        fromScreen: (screenX, screenY, floored = true): { x: number; y: number } => {
+            // todo: implement this
+            return { x: 0, y: 0 };
+        },
+        toScreen: (boardX, boardY): { x: number; y: number } => {
+            // todo: implement this
+            return { x: 0, y: 0 };
+        },
+        save: () => {
+            save();
+        },
         centerOn: (x, y, ignoreLock = false): void => {
             if (x != null) {
                 board.setPan({ x });
@@ -395,18 +551,36 @@ export const boardModuleFn: ModuleReplacementFunction<'board'> = (requireFn, mod
             }
             boardExport.update(false, ignoreLock);
         },
-        getRenderBoard: (): HTMLCanvasElement => {},
-        getContainer: (): HTMLElement => {},
+        getRenderBoard: (): HTMLCanvasElement => {
+            return board.canvas;
+        },
+        getContainer: (): HTMLElement => {
+            // this only ever gets called in chromeOffsetWorkaround, but we replace that with a fake empty module so
+            // this is no longer used
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- unused
+            return null as unknown as HTMLElement;
+        },
         getWidth: (): number => {
             return board.width;
         },
         getHeight: (): number => {
             return board.height;
         },
-        refresh: (): void => {},
-        updateViewport: (): void => {},
-        allowDrag: false,
-        setAllowDrag: (allowDrag): void => {},
+        refresh: (): void => {
+            /* intentionally empty, WebGL renderer doesn't manually refresh the board image */
+        },
+        updateViewport: ({ scale, x, y }): void => {
+            if (scale != null) {
+                boardExport.setScale(scale, false);
+            }
+            boardExport.centerOn(x, y);
+        },
+        get allowDrag(): boolean {
+            return allowDrag;
+        },
+        setAllowDrag: (allow): void => {
+            allowDrag = allow === true;
+        },
         validateCoordinates: (x, y): boolean => {
             return x >= 0 && x < board.width && y >= 0 && y < board.height;
         },
