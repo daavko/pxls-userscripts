@@ -93,7 +93,7 @@ const workerPlugin = {
                 format: 'iife',
             });
             return {
-                contents: result.outputFiles[0].text,
+                contents: result.outputFiles[0].text.trim(),
                 loader: 'text',
             };
         });
