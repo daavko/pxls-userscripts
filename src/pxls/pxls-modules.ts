@@ -76,9 +76,9 @@ export interface PxlsBoardModule {
     getWidth: () => number;
     getHeight: () => number;
     refresh: () => void;
-    updateViewport: () => void;
+    updateViewport: (data: { scale?: number; x?: number; y?: number }) => void;
     readonly allowDrag: boolean;
-    setAllowDrag: (allowDrag: boolean) => void;
+    setAllowDrag: (allowDrag?: boolean | null) => void;
     validateCoordinates: (x: number, y: number) => boolean;
     readonly webInfo: PxlsInfoResponse | false;
     readonly snipMode: boolean;

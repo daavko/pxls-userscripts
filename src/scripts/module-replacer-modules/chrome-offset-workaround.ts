@@ -6,7 +6,7 @@ export const chromeOffsetWorkaroundModuleFn: ModuleReplacementFunction<'chromeOf
     moduleExport,
 ) => {
     'use strict';
-    const settings = requireFn('./settings');
+    const { settings } = requireFn('./settings');
 
     const settingElement = $('#chrome-canvas-offset-setting');
 

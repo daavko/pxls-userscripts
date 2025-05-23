@@ -60,6 +60,10 @@ const esbuildOptions = {
         js: banner,
     },
     sourcemap: options.sourcemap ? 'inline' : false,
+    loader: {
+        '.vert': 'text',
+        '.frag': 'text',
+    },
 };
 
 const cssMinifyPlugin = {
