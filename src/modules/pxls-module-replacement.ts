@@ -13,7 +13,6 @@ import {
     type UnaryExpression,
 } from 'acorn';
 import type { PxlsModules } from '../pxls/pxls-modules';
-import type { ModuleReplacementFunction } from '../scripts/module-replacer-modules/types';
 import { debug } from './debug';
 import { hash } from './hash';
 import { showErrorMessage } from './message';
@@ -39,15 +38,12 @@ function getDpusModuleReplacement(): DPUS['moduleReplacement'] {
     return dpus.moduleReplacement;
 }
 
-export interface ModuleReplacement<TModuleName extends keyof PxlsModules = keyof PxlsModules> {
-    moduleName: TModuleName;
-    replacementFunction: ModuleReplacementFunction<TModuleName>;
+export interface ModuleReplacement {
+    moduleName: keyof PxlsModules;
+    replacementFunctionSrc: string;
 }
 
-export function registerModuleReplacement<T extends keyof PxlsModules>(
-    expectedJsHash: string,
-    replacement: ModuleReplacement<T>,
-): void {
+export function registerModuleReplacement(expectedJsHash: string, replacement: ModuleReplacement): void {
     maybeInstallOriginalScriptBlocker();
 
     const dpusModuleReplacement = getDpusModuleReplacement();
@@ -64,8 +60,7 @@ export function registerModuleReplacement<T extends keyof PxlsModules>(
     if (existingReplacement) {
         throw new Error(`Module replacement for index ${replacement.moduleName} already registered`);
     }
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- we're doing stuff that types really can't handle
-    dpusModuleReplacement.replacements.push(replacement as unknown as ModuleReplacement);
+    dpusModuleReplacement.replacements.push(replacement);
     debug('registered module replacement', replacement.moduleName, expectedJsHash);
 }
 
@@ -119,6 +114,10 @@ function maybeInstallOriginalScriptBlocker(): void {
     });
 }
 
+function createModuleReplacementFunctionSrc(replacementSrc: string): string {
+    return `function(requireFn,moduleExport){${replacementSrc}}`;
+}
+
 async function runModuleReplacement(expectedHash: string, replacements: ModuleReplacement[]): Promise<void> {
     debug('running module replacement', expectedHash, replacements);
     const scriptText = await loadPxlsJs();
@@ -149,7 +148,7 @@ async function runModuleReplacement(expectedHash: string, replacements: ModuleRe
         codeParts.push(scriptText.slice(lastEnd, module.start));
 
         const replacement = replacements.find((r) => r.moduleName === module.name)!;
-        codeParts.push(replacement.replacementFunction.toString());
+        codeParts.push(createModuleReplacementFunctionSrc(replacement.replacementFunctionSrc));
 
         lastEnd = module.end;
     }
