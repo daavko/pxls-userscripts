@@ -84,6 +84,21 @@ export interface PxlsBoardModule {
     readonly snipMode: boolean;
 }
 
+export interface BoardRenderingContext {
+    boardWidth: number;
+    boardHeight: number;
+    canvasWidth: number;
+    canvasHeight: number;
+}
+
+export interface PxlsExtendedBoardModule {
+    registerRenderLayer: (
+        name: string,
+        title: string,
+        renderFn: (ctx: WebGL2RenderingContext, boardCtx: BoardRenderingContext) => void,
+    ) => void;
+}
+
 export interface PxlsChatModule {
     init: () => Promise<void>;
     webinit: (data: PxlsInfoResponse) => Promise<void>;

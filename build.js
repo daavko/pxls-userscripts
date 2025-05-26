@@ -90,11 +90,37 @@ const workerPlugin = {
         build.onLoad({ filter: /\.worker\.ts$/ }, async (args) => {
             const result = await esbuild.build({
                 entryPoints: [args.path],
-                loader: { '.ts': 'ts' },
+                loader: {
+                    ...esbuildOptions.loader,
+                    '.ts': 'ts',
+                },
                 bundle: true,
                 minify: options.minify,
                 write: false,
                 format: 'iife',
+            });
+            return {
+                contents: result.outputFiles[0].text.trim(),
+                loader: 'text',
+            };
+        });
+    },
+};
+const pxlsModulePlugin = {
+    name: 'pxls-module-plugin',
+    setup(build) {
+        build.onLoad({ filter: /\.pxls-module\.ts$/ }, async (args) => {
+            const result = await esbuild.build({
+                entryPoints: [args.path],
+                loader: {
+                    ...esbuildOptions.loader,
+                    '.ts': 'ts',
+                },
+                bundle: true,
+                minify: options.minify,
+                write: false,
+                format: 'iife',
+                plugins: [cssMinifyPlugin, workerPlugin],
             });
             return {
                 contents: result.outputFiles[0].text.trim(),
@@ -120,7 +146,7 @@ if (options.watch) {
     console.log(`Watching ${filename}...`);
     const context = await esbuild.context({
         ...esbuildOptions,
-        plugins: [cssMinifyPlugin, workerPlugin, watchPlugin],
+        plugins: [cssMinifyPlugin, workerPlugin, pxlsModulePlugin, watchPlugin],
     });
     await context.rebuild();
     console.log('Watching for changes...');
@@ -129,7 +155,7 @@ if (options.watch) {
     console.log(`Building ${filename}...`);
     await esbuild.build({
         ...esbuildOptions,
-        plugins: [cssMinifyPlugin, workerPlugin],
+        plugins: [cssMinifyPlugin, workerPlugin, pxlsModulePlugin],
     });
     console.log(`Build complete. Output in 'dist' directory.`);
 }
