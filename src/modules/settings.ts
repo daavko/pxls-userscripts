@@ -1,6 +1,7 @@
 import type { GenericSchema, InferOutput } from 'valibot';
 import * as v from 'valibot';
 import type { NonNullableKeys } from '../util/types';
+import { debug } from './debug';
 import { showErrorMessage } from './message';
 import { getScriptId } from './pxls-init';
 
@@ -25,29 +26,26 @@ export type OptionValueUpdateCallbackMap<T extends Record<string, unknown>> = {
 export class Settings<const TSettings extends Record<string, unknown>> {
     private currentValue: TSettings;
 
+    private readonly schema: GenericSchema<unknown, Partial<TSettings>>;
+
     constructor(
         private readonly storageKey: string,
-        private readonly schema: GenericSchema<unknown, Partial<TSettings>>,
+        schema: GenericSchema<unknown, Partial<TSettings>>,
         private readonly defaultValue: TSettings,
         private readonly optionValueUpdateCallbacks: Partial<OptionValueUpdateCallbackMap<TSettings>> = {},
     ) {
         this.currentValue = this.init();
+
+        this.schema = v.pipe(v.string(), v.parseJson(), schema);
 
         window.addEventListener('storage', (event) => {
             if (event.key !== this.storageKey || event.newValue == null) {
                 return;
             }
 
-            let parsedJson: unknown;
-            try {
-                parsedJson = JSON.parse(event.newValue);
-            } catch (e) {
-                console.error(e);
-                return;
-            }
-
-            const parsedNewValue = v.safeParse(this.schema, parsedJson);
+            const parsedNewValue = v.safeParse(this.schema, event.newValue);
             if (!parsedNewValue.success) {
+                debug('Failed to parse settings from storage event', parsedNewValue.issues);
                 return;
             }
 
@@ -161,16 +159,7 @@ export class Settings<const TSettings extends Record<string, unknown>> {
             return {};
         }
 
-        let parsedJson: unknown;
-        try {
-            parsedJson = JSON.parse(storedValue);
-        } catch (e) {
-            console.error(e);
-            showErrorMessage(`Failed to parse stored settings for ${this.storageKey}`);
-            return {};
-        }
-
-        const parsedValue = v.safeParse(this.schema, parsedJson);
+        const parsedValue = v.safeParse(this.schema, storedValue);
         if (parsedValue.success) {
             return parsedValue.output;
         } else {
