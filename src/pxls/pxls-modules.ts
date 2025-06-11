@@ -91,12 +91,16 @@ export interface BoardRenderingContext {
     canvasHeight: number;
 }
 
+export interface PxlsExtendedBoardRenderLayer {
+    name: string;
+    title: string;
+    init: (ctx: WebGL2RenderingContext) => void;
+    render: (ctx: WebGL2RenderingContext, boardCtx: BoardRenderingContext) => void;
+}
+
 export interface PxlsExtendedBoardModule {
-    registerRenderLayer: (
-        name: string,
-        title: string,
-        renderFn: (ctx: WebGL2RenderingContext, boardCtx: BoardRenderingContext) => void,
-    ) => void;
+    registerRenderLayer: (layer: PxlsExtendedBoardRenderLayer) => void;
+    registerSimpleRenderLayer: (name: string, title: string, textureView: Uint32Array) => void;
 }
 
 export interface PxlsChatModule {
