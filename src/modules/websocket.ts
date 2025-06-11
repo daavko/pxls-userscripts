@@ -59,6 +59,8 @@ const pixelPlacedSchema = v.object({
 });
 type PixelPlacedData = InferOutput<typeof pixelPlacedSchema>;
 
+const pixelPlacedMessageSchema = v.pipe(v.string(), v.parseJson(), pixelPlacedSchema);
+
 class WebSocketProxy extends window.WebSocket {
     constructor(...args: ConstructorParameters<typeof window.WebSocket>) {
         super(...args);
@@ -68,16 +70,8 @@ class WebSocketProxy extends window.WebSocket {
         }
     }
 
-    readonly #handleMessage = (event: MessageEvent<string>): void => {
-        let parsedData: unknown;
-        try {
-            parsedData = JSON.parse(event.data);
-        } catch (error) {
-            console.error('Failed to parse WebSocket message', { error, event });
-            return;
-        }
-
-        const pixelPlacedData = v.safeParse(pixelPlacedSchema, parsedData);
+    readonly #handleMessage = (event: MessageEvent<unknown>): void => {
+        const pixelPlacedData = v.safeParse(pixelPlacedMessageSchema, event.data);
         if (pixelPlacedData.success) {
             window.dispatchEvent(
                 new CustomEvent(PIXEL_PLACED_EVENT_NAME, {
