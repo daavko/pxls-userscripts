@@ -206,6 +206,32 @@ const webGlRenderer = {
     },
 };
 
+const boardPanner = {
+    _pointerDownCoordinates: new Map<number, { x: number; y: number }>(),
+    pointerDown(e: PointerEvent): void {
+        // todo: add pointer
+        // todo: begin panning or whatever
+    },
+    pointerMove(e: PointerEvent): void {
+        // todo: pan/zoom according to active pointers
+    },
+    pointerUp(e: PointerEvent): void {
+        boardPanner._removePointerId(e.pointerId);
+    },
+    pointerCancel(e: PointerEvent): void {
+        boardPanner._removePointerId(e.pointerId);
+    },
+    get _anyPointerActive(): boolean {
+        return boardPanner._pointerDownCoordinates.size > 0;
+    },
+    _addPointerId(pointerId: number, x: number, y: number): void {
+        boardPanner._pointerDownCoordinates.set(pointerId, { x, y });
+    },
+    _removePointerId(pointerId: number): void {
+        boardPanner._pointerDownCoordinates.delete(pointerId);
+    },
+};
+
 const paletteRgbNumbers: number[] = [];
 
 const pixelReplay: BufferedPixel[] = [];
@@ -305,11 +331,30 @@ const initInteraction = (): void => {
         }
     });
 
-    // todo: add wheel listener to canvas
+    board.canvas.addEventListener(
+        'wheel',
+        (e) => {
+            // todo: implement zooming
+        },
+        { passive: true },
+    );
 
-    // todo: add pointerdown listener on canvas (for dragging)
-    // todo: add pointermove listener on canvas (for dragging)
-    // todo: add pointerup listener on canvas (for dragging and placing)
+    board.canvas.addEventListener('pointerdown', (e) => {
+        boardPanner.pointerDown(e);
+    });
+
+    board.canvas.addEventListener('pointermove', (e) => {
+        boardPanner.pointerMove(e);
+    });
+
+    board.canvas.addEventListener('pointerup', (e) => {
+        boardPanner.pointerUp(e);
+        // todo: place pixel
+    });
+
+    board.canvas.addEventListener('pointercancel', (e) => {
+        boardPanner.pointerCancel(e);
+    });
 };
 
 const init = (): void => {
