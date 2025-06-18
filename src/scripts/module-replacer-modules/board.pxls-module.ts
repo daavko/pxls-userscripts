@@ -1,6 +1,7 @@
 import { addStylesheet } from '../../modules/document';
 import type { PxlsAppTemplateConvertMode, PxlsBoardModule } from '../../pxls/pxls-modules';
 import type { PxlsInfoResponse } from '../../pxls/pxls-types';
+import { eventTargetIsTextInput } from '../../util/event';
 import { CanvasResizeWatcher, compileShader, createProgram } from '../../util/webgl';
 import boardStyle from './board.css';
 import fragmentShaderSource from './board.frag';
@@ -207,9 +208,12 @@ const webGlRenderer = {
 };
 
 const boardPanner = {
+    _MIN_PAN_DISTANCE: 5, // minimum distance the "pan point" must move before we can consider this a panning action
     _pointerDownCoordinates: new Map<number, { x: number; y: number }>(),
+    _minPanDistanceFuseBroken: false,
     pointerDown(e: PointerEvent): void {
-        // todo: add pointer
+        // todo: figure out coordinates
+        boardPanner._addPointerId(e.pointerId, 0, 0);
         // todo: begin panning or whatever
     },
     pointerMove(e: PointerEvent): void {
@@ -220,6 +224,9 @@ const boardPanner = {
     },
     pointerCancel(e: PointerEvent): void {
         boardPanner._removePointerId(e.pointerId);
+    },
+    get minPanDistanceFuseBroken(): number {
+        // todo: calculate current pan distance from origin point
     },
     get _anyPointerActive(): boolean {
         return boardPanner._pointerDownCoordinates.size > 0;
@@ -259,7 +266,7 @@ const save = async (): Promise<void> => {
 
 const initInteraction = (): void => {
     document.body.addEventListener('keydown', (e) => {
-        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        if (eventTargetIsTextInput(e)) {
             return;
         }
 
@@ -334,26 +341,116 @@ const initInteraction = (): void => {
     board.canvas.addEventListener(
         'wheel',
         (e) => {
-            // todo: implement zooming
+            if (!allowDrag || !e.isTrusted) {
+                return;
+            }
+
+            let delta: number;
+            switch (e.deltaMode) {
+                case WheelEvent.DOM_DELTA_PIXEL:
+                    // magic number inherited from original code
+                    delta = -e.deltaY / 53;
+                    break;
+                case WheelEvent.DOM_DELTA_LINE:
+                    // magic number inherited from original code
+                    delta = -e.deltaY / 3;
+                    break;
+                case WheelEvent.DOM_DELTA_PAGE:
+                    // magic number inherited from original code
+                    delta = Math.sign(-e.deltaY);
+                    break;
+                default:
+                    console.warn('Unknown delta mode:', e.deltaMode);
+                    delta = -e.deltaY / 53; // default to pixel mode
+            }
+
+            board.nudgeScale(delta);
+            update();
+            place.update();
         },
         { passive: true },
     );
 
-    board.canvas.addEventListener('pointerdown', (e) => {
-        boardPanner.pointerDown(e);
-    });
+    board.canvas.addEventListener(
+        'pointerdown',
+        (e) => {
+            if (!e.isTrusted) {
+                return;
+            }
 
-    board.canvas.addEventListener('pointermove', (e) => {
-        boardPanner.pointerMove(e);
-    });
+            switch (e.button) {
+                case 0: // left button
+                    if (allowDrag) {
+                        boardPanner.pointerDown(e);
+                    }
+                    break;
+                case 1: // middle button
+                    // todo: nothing?
+                    break;
+                case 2: // right button
+                    // todo: right mouse button action
+                    break;
+            }
+        },
+        { passive: true },
+    );
+
+    board.canvas.addEventListener(
+        'pointermove',
+        (e) => {
+            if (!e.isTrusted) {
+                return;
+            }
+
+            boardPanner.pointerMove(e);
+        },
+        { passive: true },
+    );
 
     board.canvas.addEventListener('pointerup', (e) => {
-        boardPanner.pointerUp(e);
-        // todo: place pixel
+        if (!e.isTrusted) {
+            return;
+        }
+
+        switch (e.button) {
+            case 0: // left button
+                if (e.isPrimary) {
+                    // todo: if we didn't pan, place a pixel
+                    // todo: if we held down long, do a lookup
+                    // todo: if we did neither, just pointerUp
+                    boardPanner.pointerUp(e);
+                } else {
+                    boardPanner.pointerUp(e);
+                }
+                break;
+            case 2: // right button
+                e.preventDefault();
+                switch (settings.place.rightclick.action.get()) {
+                    case 'clear':
+                    case 'copy':
+                    case 'lookup':
+                    case 'clearlookup':
+                }
+                // todo: right mouse button action
+                break;
+        }
     });
 
     board.canvas.addEventListener('pointercancel', (e) => {
+        if (!e.isTrusted) {
+            return;
+        }
+
         boardPanner.pointerCancel(e);
+    });
+
+    board.canvas.addEventListener('contextmenu', (e) => {
+        if (!e.isTrusted) {
+            return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
     });
 };
 
@@ -475,7 +572,7 @@ const start = (): void => {
         });
 };
 
-const update = (optional: boolean): boolean => {
+const update = (optional?: boolean, ignoreCanvasLock = false): boolean => {
     if (loaded) {
         query.set({
             x: board.panX.toString(),
@@ -484,7 +581,7 @@ const update = (optional: boolean): boolean => {
         });
     }
 
-    if (optional) {
+    if (optional === true) {
         return false;
     }
 
