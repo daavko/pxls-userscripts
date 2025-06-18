@@ -18,6 +18,7 @@ import {
     createSubheading,
 } from '../modules/settings-ui';
 import { detemplatizeImage, getTemplateImage } from '../modules/template';
+import { eventTargetIsTextInput } from '../util/event';
 import type { NonNullableKeys } from '../util/types';
 
 globalInit({ scriptId: 'templateColorAutoselector', scriptName: 'Template color autoselector' });
@@ -127,10 +128,7 @@ function initBoardEventListeners(): void {
 
 function initBodyEventListeners(): void {
     document.body.addEventListener('keydown', (event) => {
-        if (
-            event.target instanceof Node &&
-            (event.target.nodeName === 'INPUT' || event.target.nodeName === 'TEXTAREA')
-        ) {
+        if (eventTargetIsTextInput(event)) {
             return;
         }
 
