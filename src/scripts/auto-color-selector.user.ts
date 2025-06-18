@@ -16,6 +16,7 @@ import {
     createSubheading,
 } from '../modules/settings-ui';
 import { detemplatizeImage, getTemplateImage } from '../modules/template';
+import { eventTargetIsTextInput } from '../util/event';
 import { PxlsUserscript } from './userscript';
 
 const COORDS_REGEX = /^\(([0-9]+), ([0-9]+)\)$/;
@@ -162,13 +163,10 @@ export class AutoColorSelectorScript extends PxlsUserscript {
     }
 
     private initBodyEventListeners(): void {
-        document.body.addEventListener('keydown', (event) => {
-            if (
-                event.target instanceof Node &&
-                (event.target.nodeName === 'INPUT' || event.target.nodeName === 'TEXTAREA')
-            ) {
-                return;
-            }
+    document.body.addEventListener('keydown', (event) => {
+        if (eventTargetIsTextInput(event)) {
+            return;
+        }
 
             if (event.key === 'z') {
                 if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
