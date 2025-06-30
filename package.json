@@ -8,6 +8,7 @@
         "format": "prettier --write .",
         "check-format": "prettier --check .",
         "typecheck": "tsc --noEmit",
+        "build-advanced-template-renderer": "node build.js src/scripts/advanced-template-renderer.user.ts",
         "build-color-selector": "node build.js src/scripts/auto-color-selector.user.ts",
         "build-grief-tracker": "node build.js src/scripts/grief-tracker.user.ts",
         "build-milestone-watcher": "node build.js src/scripts/milestone-watcher.user.ts"
@@ -15,6 +16,7 @@
     "devDependencies": {
         "@eslint-community/eslint-plugin-eslint-comments": "^4.5.0",
         "@eslint/js": "^9.30.0",
+        "@types/dom-webcodecs": "^0.1.15",
         "@types/jquery": "^3.5.32",
         "esbuild": "^0.25.5",
         "eslint": "^9.30.0",
