@@ -29,10 +29,11 @@ const DETEMPLATIZE_CACHE_SIZE = 10;
 
 function addToTemplateImageCache(key: string, image: TemplateImage): void {
     const cache = getDpusTemplate().templateImageCache;
-    while (cache.size >= TEMPLATE_IMAGE_CACHE_SIZE) {
-        const firstKey = cache.keys().next().value!;
-        cache.delete(firstKey);
+    const keysToDrop = Math.max(0, cache.size - TEMPLATE_IMAGE_CACHE_SIZE + 1);
+    for (const droppedKey of cache.keys().take(keysToDrop)) {
+        cache.delete(droppedKey);
     }
+
     cache.set(key, image);
 }
 
@@ -46,10 +47,11 @@ function createDetemplatizeCacheKey(key: string, targetWidth: number): string {
 
 function addToDetemplatizeCache(key: string, targetWidth: number, image: Promise<ImageData>): void {
     const cache = getDpusTemplate().detemplatizeCache;
-    while (cache.size >= DETEMPLATIZE_CACHE_SIZE) {
-        const firstKey = cache.keys().next().value!;
-        cache.delete(firstKey);
+    const keysToDrop = Math.max(0, cache.size - DETEMPLATIZE_CACHE_SIZE + 1);
+    for (const droppedKey of cache.keys().take(keysToDrop)) {
+        cache.delete(droppedKey);
     }
+
     cache.set(createDetemplatizeCacheKey(key, targetWidth), image);
 }
 
