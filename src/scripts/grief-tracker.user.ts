@@ -310,8 +310,7 @@ function addGriefs(griefs: [number, number][]): void {
     }
 
     const griefsToAdd = Math.min(griefs.length, availableGriefListSize);
-    for (let i = 0; i < griefsToAdd; i++) {
-        const [x, y] = griefs[i];
+    for (const [x, y] of griefs.values().take(griefsToAdd)) {
         addGriefUnchecked(x, y);
     }
 }
