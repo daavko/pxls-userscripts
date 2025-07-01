@@ -1,5 +1,6 @@
-import { debug } from './debug';
+import { debug, debugTime } from './debug';
 import { getDpus } from './pxls-init';
+import { detemplatizeImage } from './template';
 
 export const ADVANCED_TEMPLATE_CHANGE_EVENT_NAME = 'dpus:advancedTemplateChange';
 
@@ -43,7 +44,7 @@ function environmentSupportsImageDecoder(): boolean {
     return 'ImageDecoder' in window;
 }
 
-async function fetchWithImageDecoder(url: string): Promise<ImageBitmap> {
+async function fetchWithImageDecoder(url: string): Promise<ImageData> {
     const response = await fetch(url);
     if (!response.ok) {
         throw new Error(`Failed to fetch image: ${response.statusText}`);
@@ -66,13 +67,21 @@ async function fetchWithImageDecoder(url: string): Promise<ImageBitmap> {
         throw new Error(`ImageDecoder does not support the content type: ${contentType}`);
     }
 
+    const decodeTimer = debugTime('templateImageDecoder');
     const decoder = new ImageDecoder({ type: contentType, data: bodyStream, premultiplyAlpha: 'premultiply' });
     const decodeResult = await decoder.decode();
+    decodeTimer?.stop();
 
     if (decodeResult.complete) {
         const image = decodeResult.image;
+        const { displayWidth: width, displayHeight: height } = image;
+        const imageData = new ImageData(width, height);
+        await image.copyTo(imageData.data, {
+            format: 'RGBA',
+        });
         decoder.close();
-        return await createImageBitmap(image);
+        image.close();
+        return imageData;
     } else {
         decoder.close();
         throw new Error('Image decoding was not complete');
@@ -86,27 +95,48 @@ async function fetchWithImageElement(url: string): Promise<ImageBitmap> {
     }
 
     const blob = await response.blob();
+    const imageUrl = URL.createObjectURL(blob);
+
+    const decodeTimer = debugTime('templateImageElementDecode');
     const img = new Image();
-    img.src = URL.createObjectURL(blob);
+    img.crossOrigin = 'anonymous';
+    img.src = imageUrl;
     await img.decode();
+    decodeTimer?.stop();
 
     const bitmap = await createImageBitmap(img, {
         premultiplyAlpha: 'premultiply',
     });
 
-    URL.revokeObjectURL(img.src);
+    URL.revokeObjectURL(imageUrl);
     return bitmap;
 }
 
-async function loadImageAsTemplate(url: string): Promise<ImageData> {
-    let bitmap: ImageBitmap;
+async function loadImageAsTemplate(url: string, targetWidth: number): Promise<ImageData> {
     if (environmentSupportsImageDecoder()) {
         debug('Using ImageDecoder to fetch image', url);
-        bitmap = await fetchWithImageDecoder(url);
+        const imageData = await fetchWithImageDecoder(url);
+        return await detemplatizeImage({ url, imageData }, targetWidth);
     } else {
-        debug('Using ImageElement to fetch image', url);
-        bitmap = await fetchWithImageElement(url);
-    }
+        debug('Using Image element to fetch image', url);
+        const bitmap = await fetchWithImageElement(url);
 
-    // todo: turn into template
+        const { width: imgWidth, height: imgHeight } = bitmap;
+        debug(`Template image size: ${imgWidth}x${imgHeight}`);
+
+        if (imgWidth <= 0 || imgHeight <= 0) {
+            throw new Error('Template image has invalid size after decoding, this should never happen');
+        }
+
+        const canvas = new OffscreenCanvas(imgWidth, imgHeight);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+            throw new Error('Failed to get BitmapRenderer context for template image canvas');
+        }
+        ctx.drawImage(bitmap, 0, 0);
+        const imageData = ctx.getImageData(0, 0, imgWidth, imgHeight);
+        bitmap.close();
+
+        return await detemplatizeImage({ url, imageData }, targetWidth);
+    }
 }
