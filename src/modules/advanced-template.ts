@@ -11,7 +11,8 @@ declare global {
 
     interface DPUS {
         advancedTemplate: {
-            templateData: AdvancedTemplateData[];
+            templates: readonly Readonly<AdvancedTemplate>[];
+            visibleResult: Readonly<TemplateImage> | null;
         };
     }
 }
@@ -19,25 +20,63 @@ declare global {
 function getDpusAdvancedTemplate(): DPUS['advancedTemplate'] {
     const dpus = getDpus();
     dpus.advancedTemplate ??= {
-        templateData: [],
+        templates: [],
+        visibleResult: null,
     };
     return dpus.advancedTemplate;
 }
 
-export interface AdvancedTemplateData {}
-
 export interface PendingAdvancedTemplate {
     status: 'loading';
+    url: string;
+    loadPromise: Promise<void>;
 }
 
 export interface UnavailableAdvancedTemplate {
     status: 'error';
+    url: string;
     error: Error;
 }
 
-export interface AdvancedTemplate {
+export interface LoadedAdvancedTemplate {
     status: 'loaded';
-    imageData: ImageData | VideoFrame;
+    url: string;
+    image: ImageData;
+    enabled: boolean;
+}
+
+export type AdvancedTemplate = PendingAdvancedTemplate | UnavailableAdvancedTemplate | LoadedAdvancedTemplate;
+
+export interface TemplateImage {
+    templateImage: ImageData;
+    styleImage: ImageData;
+}
+
+export function toggleTemplateEnabled(index: number): void {
+    const dpus = getDpusAdvancedTemplate();
+    if (index < 0 || index >= dpus.templates.length) {
+        throw new Error(`Invalid template index: ${index}`);
+    }
+
+    const template = dpus.templates[index];
+    if (template.status !== 'loaded') {
+        throw new Error(`Template at index ${index} is not loaded`);
+    }
+
+    const templates: AdvancedTemplate[] = [...dpus.templates];
+    templates[index] = {
+        ...template,
+        enabled: !template.enabled,
+    };
+    dpus.templates = templates;
+    dispatchEvent(new CustomEvent(ADVANCED_TEMPLATE_CHANGE_EVENT_NAME));
+}
+
+export function addTemplate(template: AdvancedTemplate): void {
+    const dpus = getDpusAdvancedTemplate();
+
+    dpus.templates = [...dpus.templates, template];
+    dispatchEvent(new CustomEvent(ADVANCED_TEMPLATE_CHANGE_EVENT_NAME));
 }
 
 function environmentSupportsImageDecoder(): boolean {
