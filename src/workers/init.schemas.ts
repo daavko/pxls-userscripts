@@ -1,6 +1,5 @@
 export interface InitMessage {
     type: 'init';
-    scriptName: string;
     enableDebug: boolean;
 }
 

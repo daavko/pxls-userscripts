@@ -1,7 +1,6 @@
 import { addStylesheet } from './document';
 import { el, svgEl } from './html';
 import infoIconStyle from './info-icon.css';
-import { getScriptName } from './pxls-init';
 import { getPxlsUITopUI } from './pxls-ui';
 
 let INFO_ICONS_CONTAINER: Element | null = null;
@@ -31,6 +30,7 @@ export class InfoIcon<const T extends InfoIconState[]> {
 
     constructor(
         readonly element: HTMLElement,
+        private readonly title: string,
         options: Partial<InfoIconOptions<T>> = {},
     ) {
         const optionsWithDefaults = {
@@ -49,6 +49,13 @@ export class InfoIcon<const T extends InfoIconState[]> {
         this.setState(this.states[0].key);
     }
 
+    addToIconsContainer(): void {
+        const container = getOrInitInfoIconsContainer();
+        if (!container.contains(this.element)) {
+            container.appendChild(this.element);
+        }
+    }
+
     setState(state: T[number]['key']): void {
         const newState = this.states.find((s) => s.key === state);
         if (!newState) {
@@ -61,7 +68,7 @@ export class InfoIcon<const T extends InfoIconState[]> {
         this.element.classList.add(this.classNameFromState(newState.color));
         this.activeState = newState;
         if (newState.title != null) {
-            this.element.setAttribute('title', `[${getScriptName()}] ${newState.title}`.trim());
+            this.element.setAttribute('title', `[${this.title}] ${newState.title}`.trim());
         } else {
             this.element.removeAttribute('title');
         }
@@ -77,14 +84,14 @@ export class InfoIcon<const T extends InfoIconState[]> {
 }
 
 export function createInfoIcon<const T extends InfoIconState[]>(
+    title: string,
     pathData: string,
     options?: Partial<InfoIconOptions<T>>,
 ): InfoIcon<T> {
     const svg = el('div', { class: 'dpus__info-icon' }, [
         svgEl('svg', { attributes: { viewBox: '0 0 24 24' } }, [svgEl('path', { attributes: { d: pathData } })]),
     ]);
-    getOrInitInfoIconsContainer().appendChild(svg);
-    return new InfoIcon(svg, options);
+    return new InfoIcon(svg, title, options);
 }
 
 export function getOrInitInfoIconsContainer(): Element {

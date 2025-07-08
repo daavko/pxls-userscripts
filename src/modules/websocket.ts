@@ -1,7 +1,6 @@
 import type { InferOutput } from 'valibot';
 import * as v from 'valibot';
 import { debug } from './debug';
-import { getDpus } from './pxls-init';
 
 export const PIXEL_PLACED_EVENT_NAME = 'dpus:pixelPlaced';
 
@@ -9,21 +8,10 @@ declare global {
     interface WindowEventMap {
         [PIXEL_PLACED_EVENT_NAME]: CustomEvent<PixelPlacedData>;
     }
-
-    interface DPUS {
-        websocket: {
-            socketProxyBound: boolean;
-        };
-    }
 }
 
-function getDpusWebSocket(): DPUS['websocket'] {
-    const dpus = getDpus();
-    dpus.websocket ??= {
-        socketProxyBound: false,
-    };
-    return dpus.websocket;
-}
+let SOCKET_PROTOTYPE_REPLACED = false;
+let SOCKET_PROXY_BOUND = false;
 
 function verifyWebSocketPrototype(websocketConstructor: typeof window.WebSocket): void {
     // @ts-expect-error -- safe, we're doing advanced stuff that can't really be type-checked
@@ -39,11 +27,16 @@ const NATIVE_WEBSOCKET = window.WebSocket;
 verifyWebSocketPrototype(NATIVE_WEBSOCKET);
 
 export function bindWebSocketProxy(): void {
+    if (SOCKET_PROTOTYPE_REPLACED) {
+        return;
+    }
+
     debug('Binding WebSocket proxy');
     verifyWebSocketPrototype(window.WebSocket);
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe, we're doing advanced stuff that can't really be type-checked
     window.WebSocket = WebSocketProxy as unknown as typeof window.WebSocket;
+    SOCKET_PROTOTYPE_REPLACED = true;
 }
 
 const placedPixelSchema = v.object({
@@ -64,9 +57,9 @@ const pixelPlacedMessageSchema = v.pipe(v.string(), v.parseJson(), pixelPlacedSc
 class WebSocketProxy extends window.WebSocket {
     constructor(...args: ConstructorParameters<typeof window.WebSocket>) {
         super(...args);
-        if (!getDpusWebSocket().socketProxyBound && args[0] === this.#pxlsSocketUrl()) {
+        if (!SOCKET_PROXY_BOUND && args[0] === this.#pxlsSocketUrl()) {
             super.addEventListener('message', this.#handleMessage);
-            getDpusWebSocket().socketProxyBound = true;
+            SOCKET_PROXY_BOUND = true;
         }
     }
 

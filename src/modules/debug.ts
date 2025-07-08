@@ -1,17 +1,12 @@
-import { getScriptName } from './pxls-init';
-import { getGlobalSettings } from './settings';
-
-function debugName(): string {
-    return `[${getScriptName()}]`;
-}
+import { GLOBAL_SETTINGS } from './settings';
 
 export function debugEnabled(): boolean {
-    return getGlobalSettings().get('debug');
+    return GLOBAL_SETTINGS.debug.get();
 }
 
 export function debug(message: string, ...data: unknown[]): void {
     if (debugEnabled()) {
-        console.debug(debugName(), message, ...data);
+        console.debug('[DPUS]', message, ...data);
     }
 }
 
@@ -22,7 +17,7 @@ export interface DebugTimer {
 
 export function debugTime(timerName: string): DebugTimer | null {
     const timerNameWithId = `${timerName} (${window.crypto.randomUUID()})`;
-    const fullTimingName = `${debugName()} ${timerNameWithId}`;
+    const fullTimingName = `[DPUS] ${timerNameWithId}`;
     if (debugEnabled()) {
         debug(`${timerNameWithId} timer started`);
         console.time(fullTimingName);

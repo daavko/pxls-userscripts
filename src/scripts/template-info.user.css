@@ -1,0 +1,11 @@
+.dpus__template-info {
+    margin-top: 16px;
+}
+
+.dpus__template-info--hidden {
+    display: none;
+}
+
+.dpus__template-info p {
+    margin-block: 0 4px;
+}

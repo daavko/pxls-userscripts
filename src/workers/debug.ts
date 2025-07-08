@@ -1,12 +1,8 @@
-import { getWorkerDebugEnabled, getWorkerScriptName } from './init';
-
-function debugName(): string {
-    return `[${getWorkerScriptName()}]`;
-}
+import { getWorkerDebugEnabled } from './init';
 
 export function workerDebug(message: string, ...data: unknown[]): void {
     if (getWorkerDebugEnabled()) {
-        console.debug(debugName(), message, ...data);
+        console.debug('[DPUS worker]', message, ...data);
     }
 }
 
@@ -17,7 +13,7 @@ export interface WorkerDebugTimer {
 
 export function workerDebugTime(timerName: string): WorkerDebugTimer | null {
     const timerNameWithId = `${timerName} (${globalThis.crypto.randomUUID()})`;
-    const fullTimingName = `${debugName()} ${timerNameWithId}`;
+    const fullTimingName = `[DPUS worker] ${timerNameWithId}`;
     if (getWorkerDebugEnabled()) {
         workerDebug(`${timerNameWithId} timer started`);
         console.time(fullTimingName);
