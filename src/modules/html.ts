@@ -82,10 +82,10 @@ function setCommonPropsAndChildren(
         element.id = options.id;
     }
     if (options?.style != null) {
-        for (const [key, value] of Object.entries(options.style)) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe, Object.entries isn't typed correctly
+        for (const [key, value] of Object.entries(options.style) as [CssKeys, string | undefined][]) {
             if (value != null) {
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-                element.style[key as CssKeys] = value;
+                element.style[key] = value;
             }
         }
     }

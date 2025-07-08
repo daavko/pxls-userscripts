@@ -1,5 +1,4 @@
 import { debugEnabled } from '../modules/debug';
-import { getScriptName } from '../modules/pxls-init';
 import type { InitMessage } from '../workers/init.schemas';
 
 export interface WorkerInstance {
@@ -15,7 +14,6 @@ export function createWorker(workerCode: string): WorkerInstance {
     worker.postMessage({
         type: 'init',
         enableDebug: debugEnabled(),
-        scriptName: getScriptName(),
     } satisfies InitMessage);
 
     const terminate = (): void => {

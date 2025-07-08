@@ -3,41 +3,26 @@ import { type DetemplatizeMessage, isDetemplatizeResultMessage } from '../worker
 import detemplatizeWorkerCode from '../workers/detemplatization.worker';
 import { debug, debugTime } from './debug';
 import { hash } from './hash';
-import { getDpus } from './pxls-init';
 import { getPxlsUITemplateImage } from './pxls-ui';
 
-declare global {
-    interface DPUS {
-        template: {
-            templateImageCache: Map<string, TemplateImage>;
-            detemplatizeCache: Map<string, Promise<ImageData>>;
-        };
-    }
-}
-
-function getDpusTemplate(): DPUS['template'] {
-    const dpus = getDpus();
-    dpus.template ??= {
-        templateImageCache: new Map(),
-        detemplatizeCache: new Map(),
-    };
-    return dpus.template;
-}
+const TEMPLATE_IMAGE_CACHE = new Map<string, TemplateImage>();
+const DETEMPLATIZE_CACHE = new Map<string, Promise<ImageData>>();
 
 const TEMPLATE_IMAGE_CACHE_SIZE = 10;
 const DETEMPLATIZE_CACHE_SIZE = 10;
 
 function addToTemplateImageCache(key: string, image: TemplateImage): void {
-    const cache = getDpusTemplate().templateImageCache;
-    while (cache.size >= TEMPLATE_IMAGE_CACHE_SIZE) {
-        const firstKey = cache.keys().next().value!;
-        cache.delete(firstKey);
+    const cache = TEMPLATE_IMAGE_CACHE;
+    const keysToDrop = Math.max(0, cache.size - TEMPLATE_IMAGE_CACHE_SIZE + 1);
+    for (const droppedKey of cache.keys().take(keysToDrop)) {
+        cache.delete(droppedKey);
     }
+
     cache.set(key, image);
 }
 
 function getFromTemplateImageCache(key: string): TemplateImage | undefined {
-    return getDpusTemplate().templateImageCache.get(key);
+    return TEMPLATE_IMAGE_CACHE.get(key);
 }
 
 function createDetemplatizeCacheKey(key: string, targetWidth: number): string {
@@ -45,16 +30,17 @@ function createDetemplatizeCacheKey(key: string, targetWidth: number): string {
 }
 
 function addToDetemplatizeCache(key: string, targetWidth: number, image: Promise<ImageData>): void {
-    const cache = getDpusTemplate().detemplatizeCache;
-    while (cache.size >= DETEMPLATIZE_CACHE_SIZE) {
-        const firstKey = cache.keys().next().value!;
-        cache.delete(firstKey);
+    const cache = DETEMPLATIZE_CACHE;
+    const keysToDrop = Math.max(0, cache.size - DETEMPLATIZE_CACHE_SIZE + 1);
+    for (const droppedKey of cache.keys().take(keysToDrop)) {
+        cache.delete(droppedKey);
     }
+
     cache.set(createDetemplatizeCacheKey(key, targetWidth), image);
 }
 
 function getFromDetemplatizeCache(key: string, targetWidth: number): Promise<ImageData> | undefined {
-    return getDpusTemplate().detemplatizeCache.get(createDetemplatizeCacheKey(key, targetWidth));
+    return DETEMPLATIZE_CACHE.get(createDetemplatizeCacheKey(key, targetWidth));
 }
 
 export interface TemplateImage {

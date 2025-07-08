@@ -1,14 +1,12 @@
 import { mdiEyedropper } from '@mdi/js';
-import type { InferOutput } from 'valibot';
-import * as v from 'valibot';
 import { debug } from '../modules/debug';
-import { createInfoIcon, type InfoIcon, type InfoIconOptions, type InfoIconState } from '../modules/info-icon';
-import { showErrorMessage } from '../modules/message';
-import { getApp, globalInit, waitForApp } from '../modules/pxls-init';
+import { createInfoIcon } from '../modules/info-icon';
+import { Messenger } from '../modules/message';
+import { getApp } from '../modules/pxls-init';
 import { anyColorSelected, getFastLookupPalette, selectColor, unselectColor } from '../modules/pxls-palette';
 import { getCurrentTemplate, TEMPLATE_CHANGE_EVENT_NAME, type TemplateData } from '../modules/pxls-template';
 import { getPxlsUIBoard, getPxlsUIMouseCoords } from '../modules/pxls-ui';
-import { createScriptSettings, getGlobalSettings, initGlobalSettings } from '../modules/settings';
+import { BooleanSetting, Settings } from '../modules/settings';
 import {
     createBooleanSetting,
     createKeyboardShortcutText,
@@ -18,342 +16,331 @@ import {
     createSubheading,
 } from '../modules/settings-ui';
 import { detemplatizeImage, getTemplateImage } from '../modules/template';
-import type { NonNullableKeys } from '../util/types';
+import { PxlsUserscript } from './userscript';
 
-globalInit({ scriptId: 'templateColorAutoselector', scriptName: 'Template color autoselector' });
-initGlobalSettings();
+const COORDS_REGEX = /^\(([0-9]+), ([0-9]+)\)$/;
 
-const settingsSchema = v.partial(
-    v.object({
-        deselectColorOutsideTemplate: v.boolean(),
-        selectColorWhenDeselectedInsideTemplate: v.boolean(),
-    }),
-);
-type SettingsType = NonNullableKeys<InferOutput<typeof settingsSchema>>;
-const settingsDefault: SettingsType = {
-    deselectColorOutsideTemplate: false,
-    selectColorWhenDeselectedInsideTemplate: false,
-};
-const settings = createScriptSettings(settingsSchema, settingsDefault);
+export class AutoColorSelectorScript extends PxlsUserscript {
+    private readonly messenger = new Messenger('Template color autoselector');
 
-let palette: number[] = [];
+    private readonly settings = Settings.create('templateColorAutoselector', {
+        deselectColorOutsideTemplate: new BooleanSetting(false),
+        selectColorWhenDeselectedInsideTemplate: new BooleanSetting(false),
+    });
 
-let detemplatizedTemplate: ImageData | null = null;
-let detemplatizedTemplateUint32View: Uint32Array | null = null;
+    private palette: number[] = [];
 
-let currentCoordX: number | null = null;
-let currentCoordY: number | null = null;
+    private detemplatizedTemplate: ImageData | null = null;
+    private detemplatizedTemplateUint32View: Uint32Array | null = null;
 
-let pointerDownCoords: { x: number; y: number } | null = null;
+    private currentCoordX: number | null = null;
+    private currentCoordY: number | null = null;
 
-let manualToggle = true;
-let pointerMoveFuse = false;
+    private pointerDownCoords: { x: number; y: number } | null = null;
 
-const coordsRegex = /^\(([0-9]+), ([0-9]+)\)$/;
-let coordsMutationEnabled = false;
-const coordsMutationObserver = new MutationObserver(() => {
-    processCoords();
-});
+    private manualToggle = true;
+    private pointerMoveFuse = false;
 
-const infoIconStates = [
-    { key: 'default', color: 'white', title: 'Idle' },
-    { key: 'disabled', color: 'gray', title: 'Disabled (click to enable)' },
-    { key: 'templateActive', color: 'green', title: 'Template active (click to disable)' },
-    { key: 'loadingTemplate', color: 'orange', title: 'Loading template' },
-    { key: 'error', color: 'red' },
-] as const satisfies InfoIconState[];
-const infoIconOptions: InfoIconOptions<typeof infoIconStates> = {
-    clickable: true,
-    states: infoIconStates,
-};
-let infoIcon: InfoIcon<typeof infoIconStates> | null = null;
+    private coordsMutationEnabled = false;
+    private readonly coordsMutationObserver = new MutationObserver(() => {
+        this.processCoords();
+    });
 
-function initSettings(): void {
-    createSettingsUI(() => [
-        createSubheading('Keybinds'),
-        createKeyboardShortcutText('Z', 'Toggle auto-select color'),
-        createLineBreak(),
-        createSubheading('Settings'),
-        createBooleanSetting(getGlobalSettings(), 'debug', 'Debug logging'),
-        createBooleanSetting(settings, 'deselectColorOutsideTemplate', 'Deselect color outside template'),
-        createBooleanSetting(
-            settings,
-            'selectColorWhenDeselectedInsideTemplate',
-            'Select color when deselected inside template',
-        ),
-        createSettingsResetButton(),
-    ]);
-}
+    private readonly infoIcon = createInfoIcon('Template color autoselector', mdiEyedropper, {
+        clickable: true,
+        states: [
+            { key: 'default', color: 'white', title: 'Idle' },
+            { key: 'disabled', color: 'gray', title: 'Disabled (click to enable)' },
+            { key: 'templateActive', color: 'green', title: 'Template active (click to disable)' },
+            { key: 'loadingTemplate', color: 'orange', title: 'Loading template' },
+            { key: 'error', color: 'red' },
+        ],
+    });
 
-function initBoardEventListeners(): void {
-    const board = getPxlsUIBoard();
-    board.addEventListener(
-        'pointerdown',
-        ({ clientX, clientY }) => {
-            pointerDownCoords = { x: clientX, y: clientY };
-            pointerMoveFuse = false;
-            debug(`Pointer down at ${pointerDownCoords.x}, ${pointerDownCoords.y}`);
-        },
-        { passive: true },
-    );
-    board.addEventListener(
-        'pointerup',
-        () => {
-            debug('Pointer up');
-            pointerDownCoords = null;
-            pointerMoveFuse = false;
-            maybeEnableCoordsMutationObserver();
-        },
-        { passive: true },
-    );
-    board.addEventListener(
-        'pointermove',
-        ({ clientX, clientY }) => {
-            if (pointerDownCoords === null || pointerMoveFuse) {
+    constructor() {
+        super('Template Color Autoselector', undefined, async () => this.initAfterApp());
+    }
+
+    private async initAfterApp(): Promise<void> {
+        this.palette = await getFastLookupPalette();
+
+        this.infoIcon.addToIconsContainer();
+        this.initSettings();
+        this.initBoardEventListeners();
+        this.initBodyEventListeners();
+        this.enableCoordsMutationObserver();
+
+        this.infoIcon.element.addEventListener('click', (e) => {
+            if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) {
                 return;
             }
 
-            const coords = { x: clientX, y: clientY };
-            const distance = Math.sqrt((coords.x - pointerDownCoords.x) ** 2 + (coords.y - pointerDownCoords.y) ** 2);
-            if (distance > 5) {
-                debug(`Pointer move fuse triggered at ${coords.x},${coords.y} distance ${distance}`);
-                pointerMoveFuse = true;
-                disableCoordsMutationObserver();
-            }
-        },
-        { passive: true },
-    );
-}
-
-function initBodyEventListeners(): void {
-    document.body.addEventListener('keydown', (event) => {
-        if (
-            event.target instanceof Node &&
-            (event.target.nodeName === 'INPUT' || event.target.nodeName === 'TEXTAREA')
-        ) {
-            return;
-        }
-
-        if (event.key === 'z') {
-            if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
+            if (e.button !== 0) {
                 return;
             }
 
-            manualToggle = !manualToggle;
-            debug('Toggle hotkey pressed');
-            if (manualToggle) {
-                maybeEnableCoordsMutationObserver();
+            this.manualToggle = !this.manualToggle;
+            if (this.manualToggle) {
+                this.maybeEnableCoordsMutationObserver();
             } else {
-                disableCoordsMutationObserver();
+                this.disableCoordsMutationObserver();
             }
-        }
-    });
-}
-
-async function init(): Promise<void> {
-    await waitForApp();
-    palette = await getFastLookupPalette();
-    infoIcon = createInfoIcon(mdiEyedropper, infoIconOptions);
-
-    debug('Initializing script');
-
-    initSettings();
-    initBoardEventListeners();
-    initBodyEventListeners();
-    enableCoordsMutationObserver();
-
-    infoIcon.element.addEventListener('click', (e) => {
-        if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) {
-            return;
-        }
-
-        if (e.button !== 0) {
-            return;
-        }
-
-        debug('Info icon clicked');
-
-        manualToggle = !manualToggle;
-        if (manualToggle) {
-            maybeEnableCoordsMutationObserver();
-        } else {
-            disableCoordsMutationObserver();
-        }
-    });
-
-    window.addEventListener(TEMPLATE_CHANGE_EVENT_NAME, ({ detail: template }) => {
-        if (template == null) {
-            if (detemplatizedTemplate != null) {
-                clearTemplate();
-            }
-        } else {
-            templateChanged(template);
-        }
-    });
-
-    const template = getCurrentTemplate();
-    if (template) {
-        debug('Template already set, loading');
-        templateChanged(template);
-    }
-}
-
-function processCoords(): void {
-    if (pointerMoveFuse || !manualToggle || !coordsMutationEnabled) {
-        // disabled via any internal mechanism
-        return;
-    }
-
-    const template = getCurrentTemplate();
-    if (detemplatizedTemplate == null || template?.x == null || template?.y == null) {
-        // no template = nothing to do
-        return;
-    }
-
-    if (!getApp().user.isLoggedIn()) {
-        // not logged in, can't place so don't touch
-        return;
-    }
-
-    const coordsText = getPxlsUIMouseCoords().textContent?.trim();
-    if (coordsText == null || coordsText === '') {
-        // empty is fine
-        return;
-    }
-
-    const match = coordsRegex.exec(coordsText);
-    if (!match) {
-        showErrorMessage('Failed to parse coords text');
-        return;
-    }
-
-    const x = parseInt(match[1]);
-    const y = parseInt(match[2]);
-
-    if (x === currentCoordX && y === currentCoordY) {
-        // no change
-        return;
-    }
-
-    currentCoordX = x;
-    currentCoordY = y;
-
-    coordsChanged(x - template.x, y - template.y);
-}
-
-function coordsChanged(x: number, y: number): void {
-    if (detemplatizedTemplate == null || detemplatizedTemplateUint32View == null) {
-        // no template = nothing to do
-        return;
-    }
-
-    if (x < 0 || y < 0 || x >= detemplatizedTemplate.width || y >= detemplatizedTemplate.height) {
-        // out of bounds
-
-        if (settings.get('deselectColorOutsideTemplate')) {
-            unselectColor();
-        }
-        return;
-    }
-
-    const i = y * detemplatizedTemplate.width + x;
-    const pixelAlpha = detemplatizedTemplate.data[i * 4 + 3];
-
-    if (pixelAlpha === 0) {
-        // transparent, so out of template
-
-        if (settings.get('deselectColorOutsideTemplate')) {
-            unselectColor();
-        }
-        return;
-    }
-
-    const pixel = detemplatizedTemplateUint32View[i];
-    const paletteColorIndex = palette.indexOf(pixel);
-    if (paletteColorIndex === -1) {
-        // no color, don't touch
-        return;
-    }
-
-    if (settings.get('selectColorWhenDeselectedInsideTemplate')) {
-        selectColor(paletteColorIndex);
-    } else {
-        if (anyColorSelected()) {
-            selectColor(paletteColorIndex);
-        }
-    }
-}
-
-function clearTemplate(): void {
-    detemplatizedTemplate = null;
-    detemplatizedTemplateUint32View = null;
-
-    infoIcon?.setState('default');
-}
-
-function templateChanged(template: TemplateData): void {
-    const width = template.width;
-    infoIcon?.setState('loadingTemplate');
-
-    getTemplateImage()
-        .then(async (imageData) => {
-            debug('Template image loaded');
-            return detemplatizeImage(imageData, width);
-        })
-        .then((detemplatizedImageData) => {
-            debug('Template image detemplatized');
-            detemplatizedTemplate = detemplatizedImageData;
-            detemplatizedTemplateUint32View = new Uint32Array(detemplatizedImageData.data.buffer);
-            if (coordsMutationEnabled) {
-                infoIcon?.setState('templateActive');
-            } else {
-                infoIcon?.setState('disabled');
-            }
-        })
-        .catch((error: Error) => {
-            infoIcon?.setState('error');
-            showErrorMessage(`Failed to load template image: ${error.message}`, error);
         });
+
+        window.addEventListener(TEMPLATE_CHANGE_EVENT_NAME, ({ detail: template }) => {
+            if (template == null) {
+                if (this.detemplatizedTemplate != null) {
+                    this.clearTemplate();
+                }
+            } else {
+                this.templateChanged(template);
+            }
+        });
+
+        const template = getCurrentTemplate();
+        if (template) {
+            debug('Template already set, loading');
+            this.templateChanged(template);
+        }
+    }
+
+    private initSettings(): void {
+        createSettingsUI('templateColorAutoselector', 'DPUS Template Color Autoselector', () => [
+            createSubheading('Keybinds'),
+            createKeyboardShortcutText('Z', 'Toggle auto-select color'),
+            createLineBreak(),
+            createSubheading('Settings'),
+            createBooleanSetting(this.settings.deselectColorOutsideTemplate, 'Deselect color outside template'),
+            createBooleanSetting(
+                this.settings.selectColorWhenDeselectedInsideTemplate,
+                'Select color when deselected inside template',
+            ),
+            createSettingsResetButton(this.settings),
+        ]);
+    }
+
+    private initBoardEventListeners(): void {
+        const board = getPxlsUIBoard();
+        board.addEventListener(
+            'pointerdown',
+            ({ clientX, clientY }) => {
+                this.pointerDownCoords = { x: clientX, y: clientY };
+                this.pointerMoveFuse = false;
+                debug(`Pointer down at ${this.pointerDownCoords.x}, ${this.pointerDownCoords.y}`);
+            },
+            { passive: true },
+        );
+        board.addEventListener(
+            'pointerup',
+            () => {
+                debug('Pointer up');
+                this.pointerDownCoords = null;
+                this.pointerMoveFuse = false;
+                this.maybeEnableCoordsMutationObserver();
+            },
+            { passive: true },
+        );
+        board.addEventListener(
+            'pointermove',
+            ({ clientX, clientY }) => {
+                if (this.pointerDownCoords === null || this.pointerMoveFuse) {
+                    return;
+                }
+
+                const coords = { x: clientX, y: clientY };
+                const distance = Math.sqrt(
+                    (coords.x - this.pointerDownCoords.x) ** 2 + (coords.y - this.pointerDownCoords.y) ** 2,
+                );
+                if (distance > 5) {
+                    debug(`Pointer move fuse triggered at ${coords.x},${coords.y} distance ${distance}`);
+                    this.pointerMoveFuse = true;
+                    this.disableCoordsMutationObserver();
+                }
+            },
+            { passive: true },
+        );
+    }
+
+    private initBodyEventListeners(): void {
+        document.body.addEventListener('keydown', (event) => {
+            if (
+                event.target instanceof Node &&
+                (event.target.nodeName === 'INPUT' || event.target.nodeName === 'TEXTAREA')
+            ) {
+                return;
+            }
+
+            if (event.key === 'z') {
+                if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
+                    return;
+                }
+
+                this.manualToggle = !this.manualToggle;
+                debug('Toggle hotkey pressed');
+                if (this.manualToggle) {
+                    this.maybeEnableCoordsMutationObserver();
+                } else {
+                    this.disableCoordsMutationObserver();
+                }
+            }
+        });
+    }
+
+    private processCoords(): void {
+        if (this.pointerMoveFuse || !this.manualToggle || !this.coordsMutationEnabled) {
+            // disabled via any internal mechanism
+            return;
+        }
+
+        const template = getCurrentTemplate();
+        if (this.detemplatizedTemplate == null || template == null) {
+            // no template = nothing to do
+            return;
+        }
+
+        if (!getApp().user.isLoggedIn()) {
+            // not logged in, can't place so don't touch
+            return;
+        }
+
+        const coordsText = getPxlsUIMouseCoords().textContent?.trim();
+        if (coordsText == null || coordsText === '') {
+            // empty is fine
+            return;
+        }
+
+        const match = COORDS_REGEX.exec(coordsText);
+        if (!match) {
+            this.messenger.showErrorMessage('Failed to parse coords text');
+            return;
+        }
+
+        const x = parseInt(match[1]);
+        const y = parseInt(match[2]);
+
+        if (x === this.currentCoordX && y === this.currentCoordY) {
+            // no change
+            return;
+        }
+
+        this.currentCoordX = x;
+        this.currentCoordY = y;
+
+        this.coordsChanged(x - template.x, y - template.y);
+    }
+
+    private coordsChanged(x: number, y: number): void {
+        if (this.detemplatizedTemplate == null || this.detemplatizedTemplateUint32View == null) {
+            // no template = nothing to do
+            return;
+        }
+
+        if (x < 0 || y < 0 || x >= this.detemplatizedTemplate.width || y >= this.detemplatizedTemplate.height) {
+            // out of bounds
+
+            if (this.settings.deselectColorOutsideTemplate.get()) {
+                unselectColor();
+            }
+            return;
+        }
+
+        const i = y * this.detemplatizedTemplate.width + x;
+        const pixelAlpha = this.detemplatizedTemplate.data[i * 4 + 3];
+
+        if (pixelAlpha === 0) {
+            // transparent, so out of template
+
+            if (this.settings.deselectColorOutsideTemplate.get()) {
+                unselectColor();
+            }
+            return;
+        }
+
+        const pixel = this.detemplatizedTemplateUint32View[i];
+        const paletteColorIndex = this.palette.indexOf(pixel);
+        if (paletteColorIndex === -1) {
+            // no color, don't touch
+            return;
+        }
+
+        if (this.settings.selectColorWhenDeselectedInsideTemplate.get()) {
+            selectColor(paletteColorIndex);
+        } else {
+            if (anyColorSelected()) {
+                selectColor(paletteColorIndex);
+            }
+        }
+    }
+
+    private clearTemplate(): void {
+        this.detemplatizedTemplate = null;
+        this.detemplatizedTemplateUint32View = null;
+
+        this.infoIcon.setState('default');
+    }
+
+    private templateChanged(template: TemplateData): void {
+        const width = template.width;
+        this.infoIcon.setState('loadingTemplate');
+
+        getTemplateImage()
+            .then(async (imageData) => {
+                debug('Template image loaded');
+                return detemplatizeImage(imageData, width);
+            })
+            .then((detemplatizedImageData) => {
+                debug('Template image detemplatized');
+                this.detemplatizedTemplate = detemplatizedImageData;
+                this.detemplatizedTemplateUint32View = new Uint32Array(detemplatizedImageData.data.buffer);
+                if (this.coordsMutationEnabled) {
+                    this.infoIcon.setState('templateActive');
+                } else {
+                    this.infoIcon.setState('disabled');
+                }
+            })
+            .catch((error: unknown) => {
+                this.infoIcon.setState('error');
+                if (error instanceof Error) {
+                    this.messenger.showErrorMessage(`Failed to load template image: ${error.message}`, error);
+                } else {
+                    this.messenger.showErrorMessage(
+                        'Failed to load template image: Unknown error',
+                        new Error('Unknown error', { cause: error }),
+                    );
+                }
+            });
+    }
+
+    private enableCoordsMutationObserver(): void {
+        if (this.coordsMutationEnabled) {
+            return;
+        }
+
+        debug('Enabling coords mutation observer');
+        this.coordsMutationObserver.observe(getPxlsUIMouseCoords(), { childList: true });
+        this.coordsMutationEnabled = true;
+        if (this.detemplatizedTemplate != null) {
+            this.infoIcon.setState('templateActive');
+        } else {
+            this.infoIcon.setState('default');
+        }
+        this.processCoords();
+    }
+
+    private disableCoordsMutationObserver(): void {
+        if (!this.coordsMutationEnabled) {
+            return;
+        }
+
+        debug('Disabling coords mutation observer');
+        this.coordsMutationObserver.disconnect();
+        this.coordsMutationEnabled = false;
+        this.infoIcon.setState('disabled');
+    }
+
+    private maybeEnableCoordsMutationObserver(): void {
+        if (this.manualToggle && !this.pointerMoveFuse) {
+            this.enableCoordsMutationObserver();
+        }
+    }
 }
-
-function enableCoordsMutationObserver(): void {
-    if (coordsMutationEnabled) {
-        return;
-    }
-
-    debug('Enabling coords mutation observer');
-    coordsMutationObserver.observe(getPxlsUIMouseCoords(), { childList: true });
-    coordsMutationEnabled = true;
-    if (detemplatizedTemplate != null) {
-        infoIcon?.setState('templateActive');
-    } else {
-        infoIcon?.setState('default');
-    }
-    processCoords();
-}
-
-function disableCoordsMutationObserver(): void {
-    if (!coordsMutationEnabled) {
-        return;
-    }
-
-    debug('Disabling coords mutation observer');
-    coordsMutationObserver.disconnect();
-    coordsMutationEnabled = false;
-    infoIcon?.setState('disabled');
-}
-
-function maybeEnableCoordsMutationObserver(): void {
-    if (manualToggle && !pointerMoveFuse) {
-        enableCoordsMutationObserver();
-    }
-}
-
-init().catch((e: unknown) => {
-    if (e instanceof Error) {
-        showErrorMessage(`Error during initialization: ${e.message}`, e);
-        return;
-    } else {
-        showErrorMessage('Unknown error during initialization', new Error('Unknown error', { cause: e }));
-    }
-});

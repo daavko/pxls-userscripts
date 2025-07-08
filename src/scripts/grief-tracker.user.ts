@@ -4,9 +4,8 @@ import * as v from 'valibot';
 import { debug, debugTime } from '../modules/debug';
 import { addStylesheet } from '../modules/document';
 import { el } from '../modules/html';
-import { createInfoIcon, InfoIcon, type InfoIconOptions, type InfoIconState } from '../modules/info-icon';
-import { showErrorMessage } from '../modules/message';
-import { globalInit, waitForApp } from '../modules/pxls-init';
+import { createInfoIcon } from '../modules/info-icon';
+import { Messenger } from '../modules/message';
 import { getFastLookupPalette } from '../modules/pxls-palette';
 import { getCurrentTemplate, TEMPLATE_CHANGE_EVENT_NAME, type TemplateData } from '../modules/pxls-template';
 import {
@@ -14,11 +13,14 @@ import {
     getPxlsUIBoardContainer,
     getPxlsUIHeatmapBoard,
     getPxlsUIVirginmapBoard,
+    waitForBoardLoaded,
+    waitForHeatmapLoaded,
+    waitForVirginmapLoaded,
 } from '../modules/pxls-ui';
-import { createScriptSettings, getGlobalSettings, initGlobalSettings } from '../modules/settings';
+import { BooleanSetting, NumberSetting, SettingBase, Settings, type SettingUpdateCallback } from '../modules/settings';
 import {
     createBooleanSetting,
-    createNumberOption,
+    createNumberSetting,
     createSelectSetting,
     createSettingsButton,
     createSettingsResetButton,
@@ -26,32 +28,24 @@ import {
 } from '../modules/settings-ui';
 import { detemplatizeImage, getTemplateImage } from '../modules/template';
 import { bindWebSocketProxy, PIXEL_PLACED_EVENT_NAME, type PlacedPixelData } from '../modules/websocket';
-import type { NonNullableKeys } from '../util/types';
+import type { PxlsApp } from '../pxls/pxls-global';
 import griefTrackerStyles from './grief-tracker.user.css';
+import { PxlsUserscript } from './userscript';
 
-globalInit({ scriptId: 'griefTracker', scriptName: 'Grief tracker' });
-initGlobalSettings();
-debug('Loading grief tracker script');
-bindWebSocketProxy();
-addStylesheet('dpus__grief-tracker', griefTrackerStyles);
+const griefDetectionModesSchema = v.picklist(['everything', 'nonVirginOnly', 'recentOnly', 'newOnly']);
+type GriefDetectionMode = InferOutput<typeof griefDetectionModesSchema>;
 
-const GRIEF_ANIMATION_STYLES = ['rgbwFlashThick', 'rgbwFlashThin'] as const;
-type GriefAnimationStyle = (typeof GRIEF_ANIMATION_STYLES)[number];
+const griefAnimationStyleSchema = v.picklist(['rgbwFlashThick', 'rgbwFlashThin']);
+type GriefAnimationStyle = InferOutput<typeof griefAnimationStyleSchema>;
+
+const griefAnimationSpeedSchema = v.picklist(['verySlow', 'slow', 'fast']);
+type GriefAnimationSpeed = InferOutput<typeof griefAnimationSpeedSchema>;
+
 const GRIEF_ANIMATION_STYLE_CLASS_MAP: Record<GriefAnimationStyle, string> = {
     rgbwFlashThick: 'dpus__grief-tracker--style-rgbw-flash-thick',
     rgbwFlashThin: 'dpus__grief-tracker--style-rgbw-flash-thin',
 };
 
-function stringToAnimationStyle(value: string): GriefAnimationStyle {
-    if ((GRIEF_ANIMATION_STYLES as readonly string[]).includes(value)) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-        return value as GriefAnimationStyle;
-    }
-    return 'rgbwFlashThin';
-}
-
-const GRIEF_ANIMATION_SPEEDS = ['fast', 'slow', 'verySlow'] as const;
-type GriefAnimationSpeed = (typeof GRIEF_ANIMATION_SPEEDS)[number];
 const GRIEF_ANIMATION_SPEED_CLASS_MAP: Record<GriefAnimationSpeed, string> = {
     fast: 'dpus__grief-tracker--speed-fast',
     slow: 'dpus__grief-tracker--speed-slow',
@@ -60,571 +54,539 @@ const GRIEF_ANIMATION_SPEED_CLASS_MAP: Record<GriefAnimationSpeed, string> = {
 
 const GRIEF_ANIMATION_NAMES = ['dpus__grief-tracker-grief__rgbw-flash'];
 
-function stringToAnimationSpeed(value: string): GriefAnimationSpeed {
-    if ((GRIEF_ANIMATION_SPEEDS as readonly string[]).includes(value)) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-        return value as GriefAnimationSpeed;
+class GriefDetectionModeSetting extends SettingBase<GriefDetectionMode, string> {
+    constructor(
+        defaultValue: GriefDetectionMode,
+        valueUpdateCallbacks: SettingUpdateCallback<GriefDetectionMode>[] = [],
+    ) {
+        super(defaultValue, griefDetectionModesSchema, valueUpdateCallbacks);
     }
-    return 'slow';
+
+    override serializeValue(value: GriefDetectionMode): string {
+        return value;
+    }
 }
 
-const GRIEF_DETECTION_MODES = ['everything', 'nonVirginOnly', 'recentOnly', 'newOnly'] as const;
-type GriefDetectionMode = (typeof GRIEF_DETECTION_MODES)[number];
-
-function stringToGriefDetectionMode(value: string): GriefDetectionMode {
-    if ((GRIEF_DETECTION_MODES as readonly string[]).includes(value)) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-        return value as GriefDetectionMode;
+class GriefAnimationStyleSetting extends SettingBase<GriefAnimationStyle, string> {
+    constructor(
+        defaultValue: GriefAnimationStyle,
+        valueUpdateCallbacks: SettingUpdateCallback<GriefAnimationStyle>[] = [],
+    ) {
+        super(defaultValue, griefAnimationStyleSchema, valueUpdateCallbacks);
     }
-    return 'recentOnly';
+
+    override serializeValue(value: GriefAnimationStyle): string {
+        return value;
+    }
 }
 
-const settingsSchema = v.partial(
-    v.object({
-        enabled: v.boolean(),
-        maxGriefListSize: v.number(),
-        detectionMode: v.pipe(
-            v.string(),
-            v.transform((value) => stringToGriefDetectionMode(value)),
-        ),
-        animationStyle: v.pipe(
-            v.string(),
-            v.transform((value) => stringToAnimationStyle(value)),
-        ),
-        animationSpeed: v.pipe(
-            v.string(),
-            v.transform((value) => stringToAnimationSpeed(value)),
-        ),
-        showClearGriefsButton: v.boolean(),
-    }),
-);
-type SettingsType = NonNullableKeys<InferOutput<typeof settingsSchema>>;
-const defaultSettings: SettingsType = {
-    enabled: true,
-    maxGriefListSize: 10_000,
-    detectionMode: 'recentOnly',
-    animationStyle: 'rgbwFlashThin',
-    animationSpeed: 'slow',
-    showClearGriefsButton: true,
-};
-const settings = createScriptSettings(settingsSchema, defaultSettings, {
-    enabled: [
-        (_, newValue): void => {
-            griefListContainer.classList.toggle('dpus__grief-tracker--hidden', !newValue);
-            if (newValue) {
-                if (detemplatizedTemplate) {
-                    infoIcon?.setState('templateActive');
+class GriefAnimationSpeedSetting extends SettingBase<GriefAnimationSpeed, string> {
+    constructor(
+        defaultValue: GriefAnimationSpeed,
+        valueUpdateCallbacks: SettingUpdateCallback<GriefAnimationSpeed>[] = [],
+    ) {
+        super(defaultValue, griefAnimationSpeedSchema, valueUpdateCallbacks);
+    }
+
+    override serializeValue(value: GriefAnimationSpeed): string {
+        return value;
+    }
+}
+
+export class GriefTrackerScript extends PxlsUserscript {
+    private readonly messenger = new Messenger('Grief tracker');
+
+    private readonly settings = Settings.create('griefTracker', {
+        enabled: new BooleanSetting(true, [
+            (_, newValue): void => {
+                this.griefListContainer.classList.toggle('dpus__grief-tracker--hidden', !newValue);
+                if (newValue) {
+                    if (this.detemplatizedTemplate) {
+                        this.infoIcon.setState('templateActive');
+                    } else {
+                        this.infoIcon.setState('default');
+                    }
                 } else {
-                    infoIcon?.setState('default');
+                    this.infoIcon.setState('disabled');
                 }
+            },
+        ]),
+        maxGriefListSize: new NumberSetting(10_000, [
+            (_, newValue): void => {
+                if (newValue < 1) {
+                    this.messenger.showErrorMessage('Max grief list size must be at least 1');
+                    this.settings.maxGriefListSize.set(1);
+                } else if (newValue < this.griefList.size) {
+                    this.messenger.showErrorMessage(
+                        `Max grief list size is now ${newValue}, but there are already ${this.griefList.size} griefs in the list. Clearing the list.`,
+                    );
+                    this.clearGriefList();
+                }
+            },
+        ]),
+        detectionMode: new GriefDetectionModeSetting('recentOnly', [
+            (_, newValue): void => {
+                this.clearGriefList();
+                if (newValue !== 'newOnly') {
+                    this.collectExistingGriefs();
+                }
+            },
+        ]),
+        animationStyle: new GriefAnimationStyleSetting('rgbwFlashThin', [
+            (oldValue, newValue): void => {
+                const oldClass = GRIEF_ANIMATION_STYLE_CLASS_MAP[oldValue];
+                const newClass = GRIEF_ANIMATION_STYLE_CLASS_MAP[newValue];
+                if (oldClass !== newClass) {
+                    this.griefListContainer.classList.remove(oldClass);
+                    this.griefListContainer.classList.add(newClass);
+                }
+            },
+        ]),
+        animationSpeed: new GriefAnimationSpeedSetting('slow', [
+            (oldValue, newValue): void => {
+                const oldClass = GRIEF_ANIMATION_SPEED_CLASS_MAP[oldValue];
+                const newClass = GRIEF_ANIMATION_SPEED_CLASS_MAP[newValue];
+                if (oldClass !== newClass) {
+                    this.griefListContainer.classList.remove(oldClass);
+                    this.griefListContainer.classList.add(newClass);
+                }
+            },
+        ]),
+        showClearGriefsButton: new BooleanSetting(true, [
+            (_, newValue): void => {
+                this.clearGriefsIcon.toggleHidden(!newValue);
+            },
+        ]),
+    });
+
+    private palette: number[] = [];
+
+    private heatmapTimerId: number | null = null;
+
+    private detemplatizedTemplate: ImageData | null = null;
+    private detemplatizedTemplateUint32View: Uint32Array | null = null;
+
+    private readonly griefListContainer = el('div', { class: 'dpus__grief-tracker' });
+    private readonly griefList = new Map<string, Element>();
+
+    private readonly infoIcon = createInfoIcon('Grief Tracker', mdiMapMarkerAlertOutline, {
+        clickable: true,
+        states: [
+            { key: 'default', color: 'white', title: 'Idle' },
+            { key: 'disabled', color: 'gray', title: 'Disabled (click to enable)' },
+            { key: 'templateActive', color: 'green', title: 'Template active (click to disable)' },
+            { key: 'loadingBoard', color: 'yellow', title: 'Loading board and virginmap' },
+            { key: 'loadingTemplate', color: 'orange', title: 'Loading template' },
+            { key: 'error', color: 'red' },
+        ],
+    });
+
+    private readonly clearGriefsIcon = createInfoIcon('Grief Tracker', mdiMapMarkerRemoveVariant, {
+        clickable: true,
+        states: [{ key: 'default', color: 'white', title: 'Clear griefs' }],
+    });
+
+    constructor() {
+        super(
+            'Grief Tracker',
+            () => {
+                this.initBeforeApp();
+            },
+            async (app) => this.initAfterApp(app),
+        );
+
+        this.infoIcon.element.addEventListener('click', (e) => {
+            if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) {
+                return;
+            }
+
+            if (e.button === 0) {
+                this.settings.enabled.set(!this.settings.enabled.get());
+            }
+        });
+
+        this.clearGriefsIcon.element.addEventListener('click', (e) => {
+            if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) {
+                return;
+            }
+
+            if (e.button === 0) {
+                this.clearGriefList();
+            }
+        });
+    }
+
+    private initSettings(): void {
+        const { settings } = this;
+        createSettingsUI('griefTracker', 'DPUS Grief Tracker', () => [
+            createBooleanSetting(settings.enabled, 'Highlight griefs'),
+            createNumberSetting(settings.maxGriefListSize, 'Max grief list size', { min: 1 }),
+            createSelectSetting(settings.detectionMode, 'Grief detection mode', [
+                { value: 'everything', label: 'Everything', title: 'Every incorrect pixel is highlighted' },
+                {
+                    value: 'nonVirginOnly',
+                    label: 'Non-virgin only',
+                    title: 'Only non-virgin incorrect pixels are highlighted',
+                },
+                {
+                    value: 'recentOnly',
+                    label: 'Recent only',
+                    title: 'Only incorrect pixels that are active on the heatmap are highlighted',
+                },
+                {
+                    value: 'newOnly',
+                    label: 'New only',
+                    title: 'No incorrect pixels are highlighted by default, only new incorrect pixels are highlighted',
+                },
+            ]),
+            createSelectSetting(settings.animationStyle, 'Animation style', [
+                { value: 'rgbwFlashThick', label: 'RGBW flash (thick)', title: 'Visible up to zoom 2' },
+                { value: 'rgbwFlashThin', label: 'RGBW flash (thin)', title: 'Visible up to zoom 1' },
+            ]),
+            createSelectSetting(settings.animationSpeed, 'Animation speed', [
+                { value: 'verySlow', label: 'Very slow', title: '2 seconds per animation frame' },
+                { value: 'slow', label: 'Slow', title: '1 second per animation frame' },
+                { value: 'fast', label: 'Fast', title: '500 milliseconds per animation frame' },
+            ]),
+            createBooleanSetting(settings.showClearGriefsButton, 'Show "Clear griefs" icon button'),
+            createSettingsButton('Clear griefs', () => {
+                this.clearGriefList();
+            }),
+            createSettingsResetButton(settings),
+        ]);
+    }
+
+    private initEventListeners(): void {
+        document.body.addEventListener('keydown', (event) => {
+            if (event.key === 'y') {
+                if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
+                    return;
+                }
+
+                this.clearGriefList();
+            }
+        });
+
+        window.addEventListener(PIXEL_PLACED_EVENT_NAME, ({ detail: { pixels } }) => {
+            if (!this.detemplatizedTemplate) {
+                return;
+            }
+
+            for (const pixel of pixels) {
+                this.pixelPlaced(pixel);
+            }
+        });
+
+        window.addEventListener(TEMPLATE_CHANGE_EVENT_NAME, ({ detail: template }) => {
+            if (template) {
+                this.templateChanged(template);
             } else {
-                infoIcon?.setState('disabled');
+                if (this.detemplatizedTemplate) {
+                    this.clearTemplate();
+                }
             }
-        },
-    ],
-    detectionMode: [
-        (_, newValue): void => {
-            clearGriefList();
-            if (newValue !== 'newOnly') {
-                collectExistingGriefs();
-            }
-        },
-    ],
-    animationStyle: [
-        (oldValue, newValue): void => {
-            const oldClass = GRIEF_ANIMATION_STYLE_CLASS_MAP[oldValue];
-            const newClass = GRIEF_ANIMATION_STYLE_CLASS_MAP[newValue];
-            if (oldClass !== newClass) {
-                griefListContainer.classList.remove(oldClass);
-                griefListContainer.classList.add(newClass);
-            }
-        },
-    ],
-    animationSpeed: [
-        (oldValue, newValue): void => {
-            const oldClass = GRIEF_ANIMATION_SPEED_CLASS_MAP[oldValue];
-            const newClass = GRIEF_ANIMATION_SPEED_CLASS_MAP[newValue];
-            if (oldClass !== newClass) {
-                griefListContainer.classList.remove(oldClass);
-                griefListContainer.classList.add(newClass);
-            }
-        },
-    ],
-    showClearGriefsButton: [
-        (_, newValue): void => {
-            clearGriefsIcon?.toggleHidden(!newValue);
-        },
-    ],
-});
+        });
+    }
 
-let palette: number[] = [];
+    private coordToMapKey(x: number, y: number): string {
+        return `${x},${y}`;
+    }
 
-let virginmapLoadPromise: Promise<void> | null = null;
-let heatmapLoadPromise: Promise<void> | null = null;
-let heatmapTimerId: number | null = null;
+    private createGriefHighlightElement(x: number, y: number): HTMLElement {
+        return el('div', {
+            class: 'dpus__grief-tracker-grief',
+            styleCustomProperties: { '--dpus--grief-coord-x': `${x}`, '--dpus--grief-coord-y': `${y}` },
+        });
+    }
 
-let detemplatizedTemplate: ImageData | null = null;
-let detemplatizedTemplateUint32View: Uint32Array | null = null;
+    private addGriefs(griefs: [number, number][]): void {
+        const availableGriefListSize = this.settings.maxGriefListSize.get() - this.griefList.size;
 
-const griefListContainer = el('div', { class: 'dpus__grief-tracker' });
-const griefList = new Map<string, Element>();
-
-const infoIconStates = [
-    { key: 'default', color: 'white', title: 'Idle' },
-    { key: 'disabled', color: 'gray', title: 'Disabled (click to enable)' },
-    { key: 'templateActive', color: 'green', title: 'Template active (click to disable)' },
-    { key: 'loadingBoard', color: 'yellow', title: 'Loading board and virginmap' },
-    { key: 'loadingTemplate', color: 'orange', title: 'Loading template' },
-    { key: 'error', color: 'red' },
-] as const satisfies InfoIconState[];
-const infoIconOptions: InfoIconOptions<typeof infoIconStates> = {
-    clickable: true,
-    states: infoIconStates,
-};
-let infoIcon: InfoIcon<typeof infoIconStates> | null = null;
-
-const clearIconStates = [{ key: 'default', color: 'white', title: 'Clear griefs' }] as const satisfies InfoIconState[];
-const clearIconOptions: InfoIconOptions<typeof clearIconStates> = {
-    clickable: true,
-    states: clearIconStates,
-};
-let clearGriefsIcon: InfoIcon<typeof clearIconStates> | null = null;
-
-function initSettings(): void {
-    createSettingsUI(() => [
-        createBooleanSetting(getGlobalSettings(), 'debug', 'Debug logging'),
-        createBooleanSetting(settings, 'enabled', 'Highlight griefs'),
-        createNumberOption(settings, 'maxGriefListSize', 'Max grief list size', { min: 1 }),
-        createSelectSetting(settings, 'detectionMode', 'Detection mode', [
-            { value: 'everything', label: 'Everything', title: 'Every incorrect pixel is highlighted' },
-            {
-                value: 'nonVirginOnly',
-                label: 'Non-virgin only',
-                title: 'Only non-virgin incorrect pixels are highlighted',
-            },
-            {
-                value: 'recentOnly',
-                label: 'Recent only',
-                title: 'Only incorrect pixels that are active on the heatmap are highlighted',
-            },
-            {
-                value: 'newOnly',
-                label: 'New only',
-                title: 'No incorrect pixels are highlighted by default, only new incorrect pixels are highlighted',
-            },
-        ]),
-        createSelectSetting(settings, 'animationStyle', 'Animation style', [
-            { value: 'rgbwFlashThick', label: 'RGBW flash (thick)', title: 'Visible up to zoom 2' },
-            { value: 'rgbwFlashThin', label: 'RGBW flash (thin)', title: 'Visible up to zoom 1' },
-        ]),
-        createSelectSetting(settings, 'animationSpeed', 'Animation speed', [
-            { value: 'verySlow', label: 'Very slow' },
-            { value: 'slow', label: 'Slow' },
-            { value: 'fast', label: 'Fast' },
-        ]),
-        createBooleanSetting(settings, 'showClearGriefsButton', 'Show "Clear griefs" icon button'),
-        createSettingsButton('Clear griefs', () => clearGriefList()),
-        createSettingsResetButton(),
-    ]);
-}
-
-function initBodyEventListeners(): void {
-    document.body.addEventListener('keydown', (event) => {
-        if (event.key === 'y') {
-            if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
-                return;
-            }
-
-            clearGriefList();
+        if (availableGriefListSize < griefs.length) {
+            this.showTooManyGriefsMessage();
         }
-    });
-}
 
-async function waitForCanvasLoaded(canvas: HTMLCanvasElement): Promise<void> {
-    const { promise, resolve } = Promise.withResolvers<void>();
-    const sizeAttributesCheck = (): void => {
-        if (canvas.getAttribute('width') !== null && canvas.getAttribute('height') !== null) {
-            observer.disconnect();
-            resolve();
+        const griefsToAdd = Math.min(griefs.length, availableGriefListSize);
+        for (const [x, y] of griefs.values().take(griefsToAdd)) {
+            this.addGriefUnchecked(x, y);
         }
-    };
-    const observer = new MutationObserver(() => sizeAttributesCheck());
-    observer.observe(canvas, {
-        attributes: true,
-        attributeFilter: ['width', 'height'],
-    });
-    sizeAttributesCheck();
-    return promise;
-}
-
-async function waitForVirginmapLoaded(): Promise<void> {
-    debug('Waiting for virginmap to load');
-    virginmapLoadPromise ??= waitForCanvasLoaded(getPxlsUIVirginmapBoard());
-    return virginmapLoadPromise;
-}
-
-async function waitForHeatmapLoaded(): Promise<void> {
-    debug('Waiting for heatmap to load');
-    heatmapLoadPromise ??= waitForCanvasLoaded(getPxlsUIHeatmapBoard());
-    return heatmapLoadPromise;
-}
-
-async function waitForBoardLoaded(): Promise<void> {
-    debug('Waiting for board to load');
-    const board = getPxlsUIBoard();
-    const ctx = board.getContext('2d');
-    if (!ctx) {
-        throw new Error('Failed to get canvas context');
     }
-    const { promise, resolve } = Promise.withResolvers<void>();
-    const intervalId = setInterval(() => {
-        const imageData = ctx.getImageData(0, 0, board.width, board.height);
-        for (let i = 0; i < imageData.data.length; i += 4) {
-            // find the first non-transparent pixel
-            if (imageData.data[i + 3] !== 0) {
-                clearInterval(intervalId);
-                resolve();
-                return;
+
+    private addGrief(x: number, y: number): void {
+        if (this.settings.maxGriefListSize.get() <= this.griefList.size) {
+            this.showTooManyGriefsMessage();
+            return;
+        }
+
+        this.addGriefUnchecked(x, y);
+    }
+
+    private addGriefUnchecked(x: number, y: number): void {
+        debug('New grief at', x, y);
+
+        const key = this.coordToMapKey(x, y);
+        if (this.griefList.has(key)) {
+            return;
+        }
+
+        const element = this.createGriefHighlightElement(x, y);
+        this.griefListContainer.appendChild(element);
+        element.addEventListener('animationstart', (e) => {
+            if (GRIEF_ANIMATION_NAMES.includes(e.animationName)) {
+                const animation = element
+                    .getAnimations()
+                    .find((a) => a instanceof CSSAnimation && a.animationName === e.animationName);
+                if (animation) {
+                    animation.startTime = 0;
+                }
             }
+        });
+        this.griefList.set(key, element);
+    }
+
+    private removeGrief(x: number, y: number): void {
+        const key = this.coordToMapKey(x, y);
+        const element = this.griefList.get(key);
+        if (element) {
+            debug('Removing grief at', x, y);
+
+            this.griefListContainer.removeChild(element);
+            this.griefList.delete(key);
         }
-    }, 1000);
-    return promise;
-}
-
-function coordToMapKey(x: number, y: number): string {
-    return `${x},${y}`;
-}
-
-function createGriefHighlightElement(x: number, y: number): HTMLElement {
-    return el('div', {
-        class: 'dpus__grief-tracker-grief',
-        styleCustomProperties: { '--dpus--grief-coord-x': `${x}`, '--dpus--grief-coord-y': `${y}` },
-    });
-}
-
-function addGriefs(griefs: [number, number][]): void {
-    const availableGriefListSize = settings.get('maxGriefListSize') - griefList.size;
-
-    if (availableGriefListSize < griefs.length) {
-        showTooManyGriefsMessage();
     }
 
-    const griefsToAdd = Math.min(griefs.length, availableGriefListSize);
-    for (let i = 0; i < griefsToAdd; i++) {
-        const [x, y] = griefs[i];
-        addGriefUnchecked(x, y);
-    }
-}
-
-function addGrief(x: number, y: number): void {
-    if (settings.get('maxGriefListSize') <= griefList.size) {
-        showTooManyGriefsMessage();
-        return;
-    }
-
-    addGriefUnchecked(x, y);
-}
-
-function addGriefUnchecked(x: number, y: number): void {
-    debug('New grief at', x, y);
-
-    const key = coordToMapKey(x, y);
-    if (griefList.has(key)) {
-        return;
-    }
-
-    const element = createGriefHighlightElement(x, y);
-    griefListContainer.appendChild(element);
-    element.addEventListener('animationstart', (e) => {
-        if (GRIEF_ANIMATION_NAMES.includes(e.animationName)) {
-            const animation = element
-                .getAnimations()
-                .find((a) => a instanceof CSSAnimation && a.animationName === e.animationName);
-            if (animation) {
-                animation.startTime = 0;
-            }
+    private clearGriefList(): void {
+        this.griefList.clear();
+        this.griefListContainer.textContent = '';
+        if (this.heatmapTimerId != null) {
+            window.clearTimeout(this.heatmapTimerId);
         }
-    });
-    griefList.set(key, element);
-}
-
-function removeGrief(x: number, y: number): void {
-    const key = coordToMapKey(x, y);
-    const element = griefList.get(key);
-    if (element) {
-        debug('Removing grief at', x, y);
-
-        griefListContainer.removeChild(element);
-        griefList.delete(key);
-    }
-}
-
-function clearGriefList(): void {
-    griefList.clear();
-    griefListContainer.textContent = '';
-    if (heatmapTimerId != null) {
-        window.clearTimeout(heatmapTimerId);
-    }
-}
-
-function showTooManyGriefsMessage(): void {
-    showErrorMessage(`Too many griefs detected. Showing only the first ${settings.get('maxGriefListSize')}.`);
-}
-
-function getCanvasMask(canvas: HTMLCanvasElement, x: number, y: number, width: number, height: number): ImageData {
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-        throw new Error('Failed to get canvas context for grief mask');
     }
 
-    return ctx.getImageData(x, y, width, height);
-}
-
-function collectExistingGriefs(): void {
-    const template = getCurrentTemplate();
-    if (!template || !detemplatizedTemplate || !detemplatizedTemplateUint32View) {
-        return;
+    private showTooManyGriefsMessage(): void {
+        this.messenger.showErrorMessage(
+            `Too many griefs detected. Showing only the first ${this.settings.maxGriefListSize.get()}.`,
+        );
     }
 
-    const board = getPxlsUIBoard();
-    const boardCtx = board.getContext('2d');
+    private getCanvasMask(canvas: HTMLCanvasElement, x: number, y: number, width: number, height: number): ImageData {
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+            throw new Error('Failed to get canvas context for grief mask');
+        }
 
-    if (!boardCtx) {
-        throw new Error('Failed to get board canvas context');
+        return ctx.getImageData(x, y, width, height);
     }
 
-    const detectionMode = settings.get('detectionMode');
+    private collectExistingGriefs(): void {
+        const template = getCurrentTemplate();
+        if (!template || !this.detemplatizedTemplate || !this.detemplatizedTemplateUint32View) {
+            return;
+        }
 
-    const { x: templateX, y: templateY } = template;
-    const boardImageData = boardCtx.getImageData(
-        templateX,
-        templateY,
-        detemplatizedTemplate.width,
-        detemplatizedTemplate.height,
-    );
-    const boardImageDataUint32View = new Uint32Array(boardImageData.data.buffer);
+        const board = getPxlsUIBoard();
+        const boardCtx = board.getContext('2d');
 
-    let canvasMask = null;
-    if (detectionMode === 'nonVirginOnly') {
-        canvasMask = getCanvasMask(
-            getPxlsUIVirginmapBoard(),
+        if (!boardCtx) {
+            throw new Error('Failed to get board canvas context');
+        }
+
+        const detectionMode = this.settings.detectionMode.get();
+
+        const { x: templateX, y: templateY } = template;
+        const boardImageData = boardCtx.getImageData(
             templateX,
             templateY,
-            detemplatizedTemplate.width,
-            detemplatizedTemplate.height,
+            this.detemplatizedTemplate.width,
+            this.detemplatizedTemplate.height,
         );
-    } else if (detectionMode === 'recentOnly') {
-        canvasMask = getCanvasMask(
-            getPxlsUIHeatmapBoard(),
-            templateX,
-            templateY,
-            detemplatizedTemplate.width,
-            detemplatizedTemplate.height,
-        );
-        if (heatmapTimerId != null) {
-            window.clearTimeout(heatmapTimerId);
-        }
-        heatmapTimerId = window.setTimeout(() => {
-            clearGriefList();
-            collectExistingGriefs();
-        }, 60_000);
-    }
+        const boardImageDataUint32View = new Uint32Array(boardImageData.data.buffer);
 
-    const debugTimer = debugTime('collectExistingGriefs');
-    const griefs: [number, number][] = [];
-    for (let y = 0; y < detemplatizedTemplate.height; y++) {
-        const rowStart = y * detemplatizedTemplate.width;
-        for (let x = 0; x < detemplatizedTemplate.width; x++) {
-            const pixelIndex = rowStart + x;
-            const pixelAlphaIndex = pixelIndex * 4 + 3;
-
-            const templateAlpha = detemplatizedTemplate.data[pixelAlphaIndex];
-            if (templateAlpha === 0) {
-                // ignore pixels that aren't in the template
-                continue;
+        let canvasMask = null;
+        if (detectionMode === 'nonVirginOnly') {
+            canvasMask = this.getCanvasMask(
+                getPxlsUIVirginmapBoard(),
+                templateX,
+                templateY,
+                this.detemplatizedTemplate.width,
+                this.detemplatizedTemplate.height,
+            );
+        } else if (detectionMode === 'recentOnly') {
+            canvasMask = this.getCanvasMask(
+                getPxlsUIHeatmapBoard(),
+                templateX,
+                templateY,
+                this.detemplatizedTemplate.width,
+                this.detemplatizedTemplate.height,
+            );
+            if (this.heatmapTimerId != null) {
+                window.clearTimeout(this.heatmapTimerId);
             }
+            this.heatmapTimerId = window.setTimeout(() => {
+                this.clearGriefList();
+                this.collectExistingGriefs();
+            }, 60_000);
+        }
 
-            if (canvasMask != null) {
-                const canvasMaskAlpha = canvasMask.data[pixelAlphaIndex];
-                if (canvasMaskAlpha === 0) {
-                    // ignore pixels that are not on the canvas mask
+        const debugTimer = debugTime('collectExistingGriefs');
+        const griefs: [number, number][] = [];
+        for (let y = 0; y < this.detemplatizedTemplate.height; y++) {
+            const rowStart = y * this.detemplatizedTemplate.width;
+            for (let x = 0; x < this.detemplatizedTemplate.width; x++) {
+                const pixelIndex = rowStart + x;
+                const pixelAlphaIndex = pixelIndex * 4 + 3;
+
+                const templateAlpha = this.detemplatizedTemplate.data[pixelAlphaIndex];
+                if (templateAlpha === 0) {
+                    // ignore pixels that aren't in the template
                     continue;
                 }
-            }
 
-            const boardColor = boardImageDataUint32View[pixelIndex];
-            const templateColor = detemplatizedTemplateUint32View[pixelIndex];
+                if (canvasMask != null) {
+                    const canvasMaskAlpha = canvasMask.data[pixelAlphaIndex];
+                    if (canvasMaskAlpha === 0) {
+                        // ignore pixels that are not on the canvas mask
+                        continue;
+                    }
+                }
 
-            if (boardColor !== templateColor) {
-                // placed color is different from template color, this is a grief
-                griefs.push([x + templateX, y + templateY]);
+                const boardColor = boardImageDataUint32View[pixelIndex];
+                const templateColor = this.detemplatizedTemplateUint32View[pixelIndex];
+
+                if (boardColor !== templateColor) {
+                    // placed color is different from template color, this is a grief
+                    griefs.push([x + templateX, y + templateY]);
+                }
             }
         }
-    }
-    debugTimer?.stop();
-    addGriefs(griefs);
-}
-
-function pixelPlaced(pixel: PlacedPixelData): void {
-    const template = getCurrentTemplate();
-    if (!template || !detemplatizedTemplate || !detemplatizedTemplateUint32View) {
-        return;
+        debugTimer?.stop();
+        this.addGriefs(griefs);
     }
 
-    const placedColor = palette.at(pixel.color);
-    if (placedColor == null) {
-        // somehow the color is not in the palette, this should never really happen
-        console.error(`Color ${pixel.color} not found in palette`);
-        return;
-    }
-
-    const pixelTemplateX = pixel.x - template.x;
-    const pixelTemplateY = pixel.y - template.y;
-    if (
-        pixelTemplateX < 0 ||
-        pixelTemplateY < 0 ||
-        pixelTemplateX >= detemplatizedTemplate.width ||
-        pixelTemplateY >= detemplatizedTemplate.height
-    ) {
-        // out of bounds
-        return;
-    }
-
-    const pixelIndex = pixelTemplateY * detemplatizedTemplate.width + pixelTemplateX;
-    const pixelAlpha = detemplatizedTemplate.data[pixelIndex * 4 + 3];
-
-    if (pixelAlpha === 0) {
-        // pixel is transparent
-        return;
-    }
-
-    const pixelColor = detemplatizedTemplateUint32View[pixelIndex];
-
-    if (pixelColor !== placedColor) {
-        // placed color is different from template color, this is a grief
-        addGrief(pixel.x, pixel.y);
-    } else {
-        removeGrief(pixel.x, pixel.y);
-    }
-}
-
-function clearTemplate(): void {
-    detemplatizedTemplate = null;
-    detemplatizedTemplateUint32View = null;
-    clearGriefList();
-    infoIcon?.setState('default');
-}
-
-function templateChanged(template: TemplateData): void {
-    const width = template.width;
-    infoIcon?.setState('loadingTemplate');
-
-    getTemplateImage()
-        .then(async (imageData) => {
-            debug('Template image loaded');
-            return detemplatizeImage(imageData, width);
-        })
-        .then((detemplatizedImageData) => {
-            debug('Template image detemplatized');
-            detemplatizedTemplate = detemplatizedImageData;
-            detemplatizedTemplateUint32View = new Uint32Array(detemplatizedImageData.data.buffer);
-            clearGriefList();
-            if (settings.get('detectionMode') !== 'newOnly') {
-                collectExistingGriefs();
-            }
-            if (settings.get('enabled')) {
-                infoIcon?.setState('templateActive');
-            } else {
-                infoIcon?.setState('disabled');
-            }
-        })
-        .catch((error: Error) => {
-            infoIcon?.setState('error');
-            showErrorMessage(`Failed to load template image: ${error.message}`, error);
-        });
-}
-
-async function init(): Promise<void> {
-    const app = await waitForApp();
-    palette = await getFastLookupPalette();
-    infoIcon = createInfoIcon(mdiMapMarkerAlertOutline, infoIconOptions);
-    clearGriefsIcon = createInfoIcon(mdiMapMarkerRemoveVariant, clearIconOptions);
-    clearGriefsIcon.toggleHidden(!settings.get('showClearGriefsButton'));
-
-    infoIcon.setState('loadingBoard');
-    await waitForBoardLoaded();
-    app.overlays.virginmap.reload();
-    app.overlays.heatmap.reload();
-    await Promise.all([waitForVirginmapLoaded(), waitForHeatmapLoaded()]);
-    infoIcon.setState('default');
-
-    debug('Initializing script');
-
-    initSettings();
-    initBodyEventListeners();
-    const boardContainer = getPxlsUIBoardContainer();
-    boardContainer.appendChild(griefListContainer);
-    const griefListContainerSpeedClass = GRIEF_ANIMATION_SPEED_CLASS_MAP[settings.get('animationSpeed')];
-    griefListContainer.classList.add(griefListContainerSpeedClass);
-    const griefListContainerStyleClass = GRIEF_ANIMATION_STYLE_CLASS_MAP[settings.get('animationStyle')];
-    griefListContainer.classList.add(griefListContainerStyleClass);
-    griefListContainer.classList.toggle('dpus__grief-tracker--hidden', !settings.get('enabled'));
-
-    infoIcon.element.addEventListener('click', (e) => {
-        if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) {
+    private pixelPlaced(pixel: PlacedPixelData): void {
+        const template = getCurrentTemplate();
+        if (!template || !this.detemplatizedTemplate || !this.detemplatizedTemplateUint32View) {
             return;
         }
 
-        debug('Info icon clicked');
-        if (e.button === 0) {
-            settings.set('enabled', !settings.get('enabled'));
-        }
-    });
-    clearGriefsIcon.element.addEventListener('click', (e) => {
-        if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) {
+        const placedColor = this.palette.at(pixel.color);
+        if (placedColor == null) {
+            // somehow the color is not in the palette, this should never really happen
+            console.error(`Color ${pixel.color} not found in palette`);
             return;
         }
 
-        debug('Clear icon clicked');
-        if (e.button === 0) {
-            clearGriefList();
-        }
-    });
-
-    window.addEventListener(PIXEL_PLACED_EVENT_NAME, ({ detail: { pixels } }) => {
-        if (!detemplatizedTemplate) {
+        const pixelTemplateX = pixel.x - template.x;
+        const pixelTemplateY = pixel.y - template.y;
+        if (
+            pixelTemplateX < 0 ||
+            pixelTemplateY < 0 ||
+            pixelTemplateX >= this.detemplatizedTemplate.width ||
+            pixelTemplateY >= this.detemplatizedTemplate.height
+        ) {
+            // out of bounds
             return;
         }
 
-        for (const pixel of pixels) {
-            pixelPlaced(pixel);
-        }
-    });
+        const pixelIndex = pixelTemplateY * this.detemplatizedTemplate.width + pixelTemplateX;
+        const pixelAlpha = this.detemplatizedTemplate.data[pixelIndex * 4 + 3];
 
-    window.addEventListener(TEMPLATE_CHANGE_EVENT_NAME, ({ detail: template }) => {
-        if (template) {
-            templateChanged(template);
+        if (pixelAlpha === 0) {
+            // pixel is transparent
+            return;
+        }
+
+        const pixelColor = this.detemplatizedTemplateUint32View[pixelIndex];
+
+        if (pixelColor !== placedColor) {
+            // placed color is different from template color, this is a grief
+            this.addGrief(pixel.x, pixel.y);
         } else {
-            if (detemplatizedTemplate) {
-                clearTemplate();
-            }
+            this.removeGrief(pixel.x, pixel.y);
         }
-    });
+    }
 
-    const template = getCurrentTemplate();
-    if (template) {
-        debug('Template already set, loading');
-        templateChanged(template);
-    } else if (!settings.get('enabled')) {
-        infoIcon.setState('disabled');
+    private clearTemplate(): void {
+        this.detemplatizedTemplate = null;
+        this.detemplatizedTemplateUint32View = null;
+        this.clearGriefList();
+        this.infoIcon.setState('default');
+    }
+
+    private templateChanged(template: TemplateData): void {
+        const width = template.width;
+        this.infoIcon.setState('loadingTemplate');
+
+        getTemplateImage()
+            .then(async (imageData) => {
+                debug('Template image loaded');
+                return detemplatizeImage(imageData, width);
+            })
+            .then((detemplatizedImageData) => {
+                debug('Template image detemplatized');
+                this.detemplatizedTemplate = detemplatizedImageData;
+                this.detemplatizedTemplateUint32View = new Uint32Array(detemplatizedImageData.data.buffer);
+                this.clearGriefList();
+                if (this.settings.detectionMode.get() !== 'newOnly') {
+                    this.collectExistingGriefs();
+                }
+                if (this.settings.enabled.get()) {
+                    this.infoIcon.setState('templateActive');
+                } else {
+                    this.infoIcon.setState('disabled');
+                }
+            })
+            .catch((error: unknown) => {
+                this.infoIcon.setState('error');
+                if (error instanceof Error) {
+                    this.messenger.showErrorMessage(`Failed to load template image: ${error.message}`, error);
+                } else {
+                    this.messenger.showErrorMessage(
+                        'Failed to load template image: Unknown error',
+                        new Error('Unknown error', { cause: error }),
+                    );
+                }
+            });
+    }
+
+    private initBeforeApp(): void {
+        bindWebSocketProxy();
+        addStylesheet('dpus__grief-tracker', griefTrackerStyles);
+    }
+
+    private async initAfterApp(app: PxlsApp): Promise<void> {
+        const { settings, griefListContainer, infoIcon, clearGriefsIcon } = this;
+
+        this.palette = await getFastLookupPalette();
+
+        this.initSettings();
+
+        infoIcon.addToIconsContainer();
+        clearGriefsIcon.addToIconsContainer();
+        clearGriefsIcon.toggleHidden(!settings.showClearGriefsButton.get());
+
+        infoIcon.setState('loadingBoard');
+        await waitForBoardLoaded();
+        app.overlays.virginmap.reload();
+        app.overlays.heatmap.reload();
+        await Promise.all([waitForVirginmapLoaded(), waitForHeatmapLoaded()]);
+        infoIcon.setState('default');
+
+        this.initEventListeners();
+        const boardContainer = getPxlsUIBoardContainer();
+        boardContainer.appendChild(griefListContainer);
+        const griefListContainerSpeedClass = GRIEF_ANIMATION_SPEED_CLASS_MAP[settings.animationSpeed.get()];
+        griefListContainer.classList.add(griefListContainerSpeedClass);
+        const griefListContainerStyleClass = GRIEF_ANIMATION_STYLE_CLASS_MAP[settings.animationStyle.get()];
+        griefListContainer.classList.add(griefListContainerStyleClass);
+        griefListContainer.classList.toggle('dpus__grief-tracker--hidden', !settings.enabled.get());
+
+        const template = getCurrentTemplate();
+        if (template) {
+            debug('Template already set, loading');
+            this.templateChanged(template);
+        } else if (!settings.enabled.get()) {
+            infoIcon.setState('disabled');
+        }
     }
 }
-
-init().catch((e: unknown) => {
-    if (e instanceof Error) {
-        showErrorMessage(`Error during initialization: ${e.message}`, e);
-        return;
-    } else {
-        showErrorMessage('Unknown error during initialization', new Error('Unknown error', { cause: e }));
-    }
-});

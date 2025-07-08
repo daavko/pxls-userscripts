@@ -1,7 +1,7 @@
 import * as v from 'valibot';
 import type { NullableKeys } from '../util/types';
 import { debug } from './debug';
-import { getApp, getDpus } from './pxls-init';
+import { getApp } from './pxls-init';
 import {
     getPxlsUITemplateImage,
     getPxlsUITemplateWidthInput,
@@ -15,23 +15,10 @@ declare global {
     interface WindowEventMap {
         [TEMPLATE_CHANGE_EVENT_NAME]: CustomEvent<TemplateData | null>;
     }
-
-    interface DPUS {
-        pxlsTemplate: {
-            eventsBound: boolean;
-            lastDispatchedTemplateData: TemplateData | null;
-        };
-    }
 }
 
-function getDpusPxlsTemplate(): DPUS['pxlsTemplate'] {
-    const dpus = getDpus();
-    dpus.pxlsTemplate ??= {
-        eventsBound: false,
-        lastDispatchedTemplateData: null,
-    };
-    return dpus.pxlsTemplate;
-}
+let eventsBound = false;
+let lastDispatchedTemplateData: TemplateData | null = null;
 
 export interface TemplateData {
     src: string;
@@ -88,7 +75,7 @@ function isTemplateChangeDataComplete(data: TemplateChangeData): data is Templat
 
 function maybeDispatchTemplateChangeEvent(): void {
     const dataIsComplete = isTemplateChangeDataComplete(lastKnownTemplateData);
-    const lastDispatchedData = getDpusPxlsTemplate().lastDispatchedTemplateData;
+    const lastDispatchedData = lastDispatchedTemplateData;
     if (dataIsComplete && lastDispatchedData !== null) {
         const isDifferent =
             lastDispatchedData.src !== lastKnownTemplateData.src ||
@@ -110,7 +97,7 @@ function dispatchTemplateChangeEvent(data: TemplateData | null): void {
         detail: data,
     });
     debug('Dispatching template change event', data);
-    getDpusPxlsTemplate().lastDispatchedTemplateData = data;
+    lastDispatchedTemplateData = data;
     window.dispatchEvent(event);
 }
 
@@ -135,8 +122,7 @@ function runNumericTemplateParameterChanges(): void {
 }
 
 export function initTemplateEventHandlers(): void {
-    const dpusPxlsTemplate = getDpusPxlsTemplate();
-    const bindEvents = !dpusPxlsTemplate.eventsBound;
+    const bindEvents = !eventsBound;
 
     if (bindEvents) {
         getPxlsUITemplateWidthInput().addEventListener('change', function () {
@@ -215,13 +201,12 @@ export function initTemplateEventHandlers(): void {
 
     runNumericTemplateParameterChanges();
 
-    dpusPxlsTemplate.eventsBound = true;
+    eventsBound = true;
 }
 
 export function getCurrentTemplate(): TemplateData | null {
-    const dpusPxlsTemplate = getDpusPxlsTemplate();
-    if (dpusPxlsTemplate.lastDispatchedTemplateData) {
-        return { ...dpusPxlsTemplate.lastDispatchedTemplateData };
+    if (lastDispatchedTemplateData) {
+        return { ...lastDispatchedTemplateData };
     } else {
         return null;
     }

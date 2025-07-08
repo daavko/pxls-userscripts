@@ -1,32 +1,14 @@
-import { getDpus } from './pxls-init';
-
-declare global {
-    interface DPUS {
-        dpusDocument: {
-            stylesheets: string[];
-        };
-    }
-}
-
-function getDpusDocument(): DPUS['dpusDocument'] {
-    const dpus = getDpus();
-    dpus.dpusDocument ??= {
-        stylesheets: [],
-    };
-    return dpus.dpusDocument;
-}
+const INSERTED_STYLESHEETS: string[] = [];
 
 export function addStylesheet(name: string, css: string): void {
-    const dpusDocument = getDpusDocument();
-
-    if (dpusDocument.stylesheets.includes(name)) {
+    if (INSERTED_STYLESHEETS.includes(name)) {
         return;
     }
 
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(css);
     document.adoptedStyleSheets.push(sheet);
-    dpusDocument.stylesheets.push(name);
+    INSERTED_STYLESHEETS.push(name);
 }
 
 export function createRandomElementId(): string {

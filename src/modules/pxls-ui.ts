@@ -10,6 +10,7 @@ let PXLS_UI_TEMPLATE_WIDTH_INPUT: HTMLInputElement | null = null;
 let PXLS_UI_TEMPLATE_X_INPUT: HTMLInputElement | null = null;
 let PXLS_UI_TEMPLATE_Y_INPUT: HTMLInputElement | null = null;
 let PXLS_UI_TOP_UI: HTMLElement | null = null;
+let PXLS_UI_MAIN_BUBBLE: HTMLElement | null = null;
 
 function getPxlsUIElement<T extends Element | Element[]>(getter: () => T | null, name: string): T {
     const element = getter();
@@ -65,6 +66,10 @@ export function getPxlsUITemplateYInput(): HTMLInputElement {
 
 export function getPxlsUITopUI(): HTMLElement {
     return getPxlsUIElement(() => PXLS_UI_TOP_UI, 'PXLS_UI_TOP_UI');
+}
+
+export function getPxlsUIMainBubble(): HTMLElement {
+    return getPxlsUIElement(() => PXLS_UI_MAIN_BUBBLE, 'PXLS_UI_MAIN_BUBBLE');
 }
 
 export function findUIElements(): void {
@@ -131,4 +136,70 @@ export function findUIElements(): void {
     if (!PXLS_UI_TOP_UI) {
         throw new Error('Failed to find top UI, this should never happen');
     }
+
+    PXLS_UI_MAIN_BUBBLE = document.querySelector('#ui > #ui-top > #main-bubble');
+    if (!PXLS_UI_MAIN_BUBBLE) {
+        throw new Error('Failed to find main bubble, this should never happen');
+    }
+}
+
+let BOARD_LOAD_PROMISE: Promise<HTMLCanvasElement> | null;
+
+export async function waitForBoardLoaded(): Promise<HTMLCanvasElement> {
+    if (BOARD_LOAD_PROMISE) {
+        return BOARD_LOAD_PROMISE;
+    }
+
+    const board = getPxlsUIBoard();
+    const ctx = board.getContext('2d');
+    if (!ctx) {
+        throw new Error('Failed to get 2D context for board canvas');
+    }
+    const { promise, resolve } = Promise.withResolvers<HTMLCanvasElement>();
+    BOARD_LOAD_PROMISE = promise;
+    const intervalId = setInterval(() => {
+        const imageData = ctx.getImageData(0, 0, board.width, board.height);
+        for (let i = 0; i < imageData.data.length; i += 4) {
+            // find the first non-transparent pixel
+            if (imageData.data[i + 3] !== 0) {
+                clearInterval(intervalId);
+                resolve(board);
+                return;
+            }
+        }
+    }, 1000);
+    return promise;
+}
+
+async function waitForCanvasLoaded(canvas: HTMLCanvasElement): Promise<HTMLCanvasElement> {
+    const { promise, resolve } = Promise.withResolvers<HTMLCanvasElement>();
+    const sizeAttributesCheck = (): void => {
+        if (canvas.getAttribute('width') !== null && canvas.getAttribute('height') !== null) {
+            observer.disconnect();
+            resolve(canvas);
+        }
+    };
+    const observer = new MutationObserver(() => {
+        sizeAttributesCheck();
+    });
+    observer.observe(canvas, {
+        attributes: true,
+        attributeFilter: ['width', 'height'],
+    });
+    sizeAttributesCheck();
+    return promise;
+}
+
+let VIRGINMAP_LOAD_PROMISE: Promise<HTMLCanvasElement> | null;
+
+export async function waitForVirginmapLoaded(): Promise<HTMLCanvasElement> {
+    VIRGINMAP_LOAD_PROMISE ??= waitForCanvasLoaded(getPxlsUIVirginmapBoard());
+    return VIRGINMAP_LOAD_PROMISE;
+}
+
+let HEATMAP_LOAD_PROMISE: Promise<HTMLCanvasElement> | null;
+
+export async function waitForHeatmapLoaded(): Promise<HTMLCanvasElement> {
+    HEATMAP_LOAD_PROMISE ??= waitForCanvasLoaded(getPxlsUIHeatmapBoard());
+    return HEATMAP_LOAD_PROMISE;
 }

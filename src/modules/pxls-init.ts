@@ -2,57 +2,9 @@ import * as v from 'valibot';
 import type { PxlsApp } from '../pxls/pxls-global';
 import { waitForAnimationFrame } from '../util/browser';
 import { debug } from './debug';
-import { showErrorMessage } from './message';
-import { initTemplateEventHandlers } from './pxls-template';
-import { findUIElements } from './pxls-ui';
+import { GLOBAL_MESSENGER } from './message';
 
-declare global {
-    interface Window {
-        dpus?: Partial<DPUS>;
-    }
-
-    interface DPUS {
-        global: {
-            scripts: string[];
-        };
-    }
-}
-
-export interface ScriptInitParams {
-    scriptId: string;
-    scriptName: string;
-}
-
-let SCRIPT_ID: string | null = null;
-let SCRIPT_NAME: string | null = null;
-
-export function getScriptId(): string {
-    if (SCRIPT_ID === null) {
-        throw new Error('Script ID is not set. Call globalInit() first.');
-    }
-    return SCRIPT_ID;
-}
-
-export function getScriptName(): string {
-    if (SCRIPT_NAME === null) {
-        throw new Error('Script name is not set. Call globalInit() first.');
-    }
-    return SCRIPT_NAME;
-}
-
-export function globalInit(initParams: ScriptInitParams): void {
-    const { scriptId, scriptName } = initParams;
-    const dpusGlobal = getDpusGlobal();
-    if (!dpusGlobal.scripts.includes(scriptId)) {
-        dpusGlobal.scripts.push(scriptId);
-    } else {
-        throw new Error(`Script ${scriptId} already initialized`);
-    }
-    SCRIPT_ID = scriptId;
-    SCRIPT_NAME = scriptName;
-}
-
-export async function waitForApp(checkInterval = 1000): Promise<PxlsApp> {
+export async function waitForApp(checkInterval = 100): Promise<PxlsApp> {
     let app: PxlsApp;
     if (window.App) {
         debug('App found, checking login state');
@@ -74,10 +26,6 @@ export async function waitForApp(checkInterval = 1000): Promise<PxlsApp> {
         }, checkInterval);
         app = await promise;
     }
-
-    findUIElements();
-    initTemplateEventHandlers();
-
     return app;
 }
 
@@ -86,19 +34,6 @@ export function getApp(): PxlsApp {
         throw new Error('App is not initialized');
     }
     return window.App;
-}
-
-export function getDpus(): Partial<DPUS> {
-    window.dpus ??= {};
-    return window.dpus;
-}
-
-export function getDpusGlobal(): DPUS['global'] {
-    const dpus = getDpus();
-    dpus.global ??= {
-        scripts: [],
-    };
-    return dpus.global;
 }
 
 async function waitForLogin(): Promise<void> {
@@ -120,7 +55,10 @@ async function waitForLogin(): Promise<void> {
                 }
             } else {
                 const errorMessage = 'Login state received is not a boolean';
-                showErrorMessage(errorMessage, new Error(errorMessage, { cause: loggedInParseResult.issues }));
+                GLOBAL_MESSENGER.showErrorMessage(
+                    errorMessage,
+                    new Error(errorMessage, { cause: loggedInParseResult.issues }),
+                );
             }
         });
         return promise;

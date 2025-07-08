@@ -1,219 +1,227 @@
-import type { GenericSchema, InferOutput } from 'valibot';
+import type { GenericSchema } from 'valibot';
 import * as v from 'valibot';
-import type { NonNullableKeys } from '../util/types';
 import { debug } from './debug';
-import { showErrorMessage } from './message';
-import { getScriptId } from './pxls-init';
+import { GLOBAL_MESSENGER } from './message';
 
-export type BooleanOption<T extends Record<string, unknown>, K extends keyof T> = T[K] extends boolean ? T[K] : never;
-export type NumberOption<T extends Record<string, unknown>, K extends keyof T> = T[K] extends number ? T[K] : never;
-export type StringOption<T extends Record<string, unknown>, K extends keyof T> = T[K] extends string ? T[K] : never;
+export type SettingUpdateCallback<TValue> = (oldValue: TValue, newValue: TValue) => void;
 
-export type BooleanOptionKeys<T extends Record<string, unknown>> = {
-    [K in keyof T]: T[K] extends boolean ? K : never;
-}[keyof T];
-export type NumberOptionKeys<T extends Record<string, unknown>> = {
-    [K in keyof T]: T[K] extends number ? K : never;
-}[keyof T];
-export type StringOptionKeys<T extends Record<string, unknown>> = {
-    [K in keyof T]: T[K] extends string ? K : never;
-}[keyof T];
+export interface Setting<TValue, TSerializedValue> {
+    readonly defaultValue: TValue;
 
-export type OptionValueUpdateCallbackMap<T extends Record<string, unknown>> = {
-    [K in keyof T]?: ((oldValue: T[K], newValue: T[K]) => void)[];
+    get(): TValue;
+    set(value: TValue): void;
+    reset(): void;
+    addCallback(callback: SettingUpdateCallback<TValue>): void;
+    removeCallback(callback: SettingUpdateCallback<TValue>): void;
+
+    init(value: unknown): void;
+    parseValue(value: unknown): TValue;
+    serializeValue(value: TValue): TSerializedValue;
+}
+
+export abstract class SettingBase<TValue, TSerializedValue = TValue> implements Setting<TValue, TSerializedValue> {
+    protected readonly valueUpdateCallbacks: Set<SettingUpdateCallback<TValue>>;
+
+    protected currentValue: TValue;
+
+    protected constructor(
+        readonly defaultValue: TValue,
+        protected readonly schema: GenericSchema<unknown, TValue>,
+        valueUpdateCallbacks: SettingUpdateCallback<TValue>[] = [],
+    ) {
+        this.valueUpdateCallbacks = new Set(valueUpdateCallbacks);
+        this.currentValue = defaultValue;
+    }
+
+    addCallback(callback: SettingUpdateCallback<TValue>): void {
+        this.valueUpdateCallbacks.add(callback);
+    }
+
+    removeCallback(callback: SettingUpdateCallback<TValue>): void {
+        this.valueUpdateCallbacks.delete(callback);
+    }
+
+    get(): TValue {
+        return this.currentValue;
+    }
+
+    set(value: TValue): void {
+        const oldValue = this.currentValue;
+        if (oldValue === value) {
+            return;
+        }
+        this.currentValue = value;
+        this.notifyCallbacks(oldValue, value);
+    }
+
+    reset(): void {
+        this.set(this.defaultValue);
+    }
+
+    init(value: unknown): void {
+        this.currentValue = this.parseValue(value);
+    }
+
+    parseValue(value: unknown): TValue {
+        const parsed = v.safeParse(this.schema, value);
+        if (parsed.success) {
+            return parsed.output;
+        } else {
+            debug('Failed to parse setting value', parsed.issues);
+            return this.defaultValue;
+        }
+    }
+
+    serializeValue(value: TValue): TSerializedValue {
+        // Default implementation, can be overridden by subclasses
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe for default typing
+        return value as unknown as TSerializedValue;
+    }
+
+    protected notifyCallbacks(oldValue: TValue, newValue: TValue): void {
+        for (const callback of this.valueUpdateCallbacks) {
+            callback(oldValue, newValue);
+        }
+    }
+}
+
+export class BooleanSetting extends SettingBase<boolean> {
+    constructor(defaultValue: boolean, valueUpdateCallbacks: SettingUpdateCallback<boolean>[] = []) {
+        super(defaultValue, v.boolean(), valueUpdateCallbacks);
+    }
+}
+
+export class NumberSetting extends SettingBase<number> {
+    constructor(defaultValue: number, valueUpdateCallbacks: SettingUpdateCallback<number>[] = []) {
+        super(defaultValue, v.number(), valueUpdateCallbacks);
+    }
+}
+
+export class StringSetting extends SettingBase<string> {
+    constructor(defaultValue: string, valueUpdateCallbacks: SettingUpdateCallback<string>[] = []) {
+        super(defaultValue, v.string(), valueUpdateCallbacks);
+    }
+}
+
+type SettingsWithSettingKeys<TSettingsClass, T extends Record<string, Setting<unknown, unknown>>> = TSettingsClass & {
+    [K in keyof T]: T[K];
 };
 
-export class Settings<const TSettings extends Record<string, unknown>> {
-    private currentValue: TSettings;
+export class Settings<const TSettings extends Record<string, Setting<unknown, unknown>>> {
+    private static readonly schema = v.pipe(v.string(), v.parseJson(), v.record(v.string(), v.unknown()));
 
-    private readonly schema: GenericSchema<unknown, Partial<TSettings>>;
-
-    constructor(
+    protected constructor(
         private readonly storageKey: string,
-        schema: GenericSchema<unknown, Partial<TSettings>>,
-        private readonly defaultValue: TSettings,
-        private readonly optionValueUpdateCallbacks: Partial<OptionValueUpdateCallbackMap<TSettings>> = {},
+        readonly settings: TSettings,
     ) {
-        this.currentValue = this.init();
+        this.init();
 
-        this.schema = v.pipe(v.string(), v.parseJson(), schema);
+        for (const [, setting] of Object.entries(this.settings)) {
+            setting.addCallback(() => {
+                this.saveStoredValue(this.collectSerializedSettings());
+            });
+        }
 
         window.addEventListener('storage', (event) => {
             if (event.key !== this.storageKey || event.newValue == null) {
                 return;
             }
 
-            const parsedNewValue = v.safeParse(this.schema, event.newValue);
+            const parsedNewValue = v.safeParse(Settings.schema, event.newValue);
             if (!parsedNewValue.success) {
                 debug('Failed to parse settings from storage event', parsedNewValue.issues);
                 return;
             }
 
-            const newValue = { ...this.defaultValue, ...parsedNewValue.output };
-            const previousValue = this.currentValue;
-            this.currentValue = newValue;
-            for (const [key, value] of Object.entries(this.currentValue)) {
-                const callbacks = this.optionValueUpdateCallbacks[key as keyof TSettings];
-                const oldValue = previousValue[key as keyof TSettings];
-                if (callbacks != null) {
-                    for (const callback of callbacks) {
-                        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-                        callback(oldValue, value as TSettings[typeof key]);
-                    }
-                }
+            const newValue = { ...this.collectDefaultSerializedSettings(), ...parsedNewValue.output };
+            for (const [key, setting] of Object.entries(this.settings)) {
+                const value = newValue[key];
+                setting.set(setting.parseValue(value));
             }
         });
     }
 
-    get<K extends keyof TSettings>(option: K): TSettings[K] {
-        return this.currentValue[option];
-    }
-
-    set<K extends keyof TSettings>(option: K, value: TSettings[K]): void {
-        const storedValue = this.loadFullStoredValue();
-        const oldSettingValue = storedValue[option];
-        const newValue = { ...storedValue, [option]: value };
-        this.saveStoredValue(newValue);
-        this.currentValue = newValue;
-        const callbacks = this.optionValueUpdateCallbacks[option];
-        for (const callback of callbacks ?? []) {
-            callback(oldSettingValue, value);
+    static create<const TSettings extends Record<string, Setting<unknown, unknown>>>(
+        storageKey: string,
+        settings: TSettings & {
+            [K in keyof Settings<TSettings> &
+                keyof TSettings]: `Property with name "${K}" already exists on type Settings, can't use as a setting key`;
+        },
+    ): SettingsWithSettingKeys<Settings<TSettings>, TSettings> {
+        const settingsObject = new Settings(`dpus_settings_${storageKey}`, settings);
+        for (const [key, setting] of Object.entries(settings)) {
+            if (Object.hasOwn(settingsObject, key)) {
+                throw new Error(
+                    `Property with name "${key}" already exists on Settings object, can't use as a setting key`,
+                );
+            }
+            Object.defineProperty(settingsObject, key, {
+                value: setting,
+                writable: false,
+            });
         }
-    }
 
-    addCallback<K extends keyof TSettings>(
-        option: K,
-        callback: (oldValue: TSettings[K], newValue: TSettings[K]) => void,
-    ): void {
-        const callbacks = this.optionValueUpdateCallbacks[option] ?? [];
-        callbacks.push(callback);
-        this.optionValueUpdateCallbacks[option] = callbacks;
-    }
-
-    removeCallback<K extends keyof TSettings>(
-        option: K,
-        callback: (oldValue: TSettings[K], newValue: TSettings[K]) => void,
-    ): void {
-        const callbacks = this.optionValueUpdateCallbacks[option];
-        if (callbacks == null) {
-            return;
-        }
-        const index = callbacks.indexOf(callback);
-        if (index !== -1) {
-            callbacks.splice(index, 1);
-        }
-    }
-
-    _getBoolean<K extends keyof TSettings>(option: K): BooleanOption<TSettings, K> {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-        return this.get(option) as BooleanOption<TSettings, K>;
-    }
-
-    _setBoolean<K extends BooleanOptionKeys<TSettings>>(option: K, value: boolean): void {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-        this.set(option, value as TSettings[K]);
-    }
-
-    _getNumber<K extends keyof TSettings>(option: K): NumberOption<TSettings, K> {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-        return this.get(option) as NumberOption<TSettings, K>;
-    }
-
-    _setNumber<K extends NumberOptionKeys<TSettings>>(option: K, value: number): void {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-        this.set(option, value as TSettings[K]);
-    }
-
-    _getString<K extends keyof TSettings>(option: K): StringOption<TSettings, K> {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-        return this.get(option) as StringOption<TSettings, K>;
-    }
-
-    _setString<K extends StringOptionKeys<TSettings>>(option: K, value: string): void {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-        this.set(option, value as TSettings[K]);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- dynamic properties, not typeable
+        return settingsObject as unknown as SettingsWithSettingKeys<Settings<TSettings>, TSettings>;
     }
 
     reset(): void {
-        this.saveStoredValue(this.defaultValue);
-    }
-
-    private init(): TSettings {
-        const storedValue = this.loadStoredValue();
-        const resolvedValue = { ...this.defaultValue, ...storedValue };
-        this.saveStoredValue(resolvedValue);
-        return resolvedValue;
-    }
-
-    private loadFullStoredValue(): TSettings {
-        const storedValue = this.loadStoredValue();
-        if (storedValue == null) {
-            return this.defaultValue;
+        for (const setting of Object.values(this.settings)) {
+            setting.reset();
         }
-        return { ...this.defaultValue, ...storedValue };
+        this.saveStoredValue(this.collectSerializedSettings());
     }
 
-    private loadStoredValue(): Partial<TSettings> {
+    private init(): void {
+        const storedValue = this.loadStoredValue();
+        const resolvedValue = {
+            ...this.collectDefaultSerializedSettings(),
+            ...storedValue,
+        };
+        this.saveStoredValue(resolvedValue);
+        for (const [key, setting] of Object.entries(this.settings)) {
+            const value = resolvedValue[key];
+            setting.init(value);
+        }
+    }
+
+    private loadStoredValue(): Record<string, unknown> {
         const storedValue = localStorage.getItem(this.storageKey);
         if (storedValue == null) {
             return {};
         }
 
-        const parsedValue = v.safeParse(this.schema, storedValue);
+        const parsedValue = v.safeParse(Settings.schema, storedValue);
         if (parsedValue.success) {
             return parsedValue.output;
         } else {
             const errorMessage = `Stored settings for ${this.storageKey} are invalid`;
-            showErrorMessage(errorMessage, new Error(errorMessage, { cause: parsedValue.issues }));
+            GLOBAL_MESSENGER.showErrorMessage(errorMessage, new Error(errorMessage, { cause: parsedValue.issues }));
             return {};
         }
     }
 
-    private saveStoredValue(valueToStore: Partial<TSettings>): void {
-        const storedValue = this.loadFullStoredValue();
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
-        for (const [key, value] of Object.entries(valueToStore) as [keyof TSettings, TSettings[keyof TSettings]][]) {
-            storedValue[key] = value;
+    private saveStoredValue(value: Record<string, unknown>): void {
+        localStorage.setItem(this.storageKey, JSON.stringify(value));
+    }
+
+    private collectSerializedSettings(): Record<string, unknown> {
+        const serializedSettings: Record<string, unknown> = {};
+        for (const [key, setting] of Object.entries(this.settings)) {
+            serializedSettings[key] = setting.serializeValue(setting.get());
         }
-        localStorage.setItem(this.storageKey, JSON.stringify(storedValue));
+        return serializedSettings;
+    }
+
+    private collectDefaultSerializedSettings(): Record<string, unknown> {
+        const serializedSettings: Record<string, unknown> = {};
+        for (const [key, setting] of Object.entries(this.settings)) {
+            serializedSettings[key] = setting.serializeValue(setting.defaultValue);
+        }
+        return serializedSettings;
     }
 }
 
-let GLOBAL_SETTINGS: Settings<GlobalSettingsObject> | null = null;
-
-const globalSettingsSchema = v.partial(
-    v.object({
-        debug: v.boolean(),
-        settingsUiCollapsed: v.boolean(),
-    }),
-);
-type GlobalSettingsObject = NonNullableKeys<InferOutput<typeof globalSettingsSchema>>;
-const globalSettingsDefault: GlobalSettingsObject = {
-    debug: false,
-    settingsUiCollapsed: false,
-};
-
-export function initGlobalSettings(): void {
-    if (GLOBAL_SETTINGS != null) {
-        return;
-    }
-
-    const storageKey = `dpus_${getScriptId()}_globalSettings`;
-    GLOBAL_SETTINGS = new Settings(storageKey, globalSettingsSchema, globalSettingsDefault);
-}
-
-export function getGlobalSettings(): NonNullable<typeof GLOBAL_SETTINGS> {
-    if (GLOBAL_SETTINGS == null) {
-        throw new Error('Global settings not initialized');
-    }
-    return GLOBAL_SETTINGS;
-}
-
-export function createScriptSettings<const TSettings extends Record<string, unknown>>(
-    schema: GenericSchema<unknown, Partial<TSettings>>,
-    defaultValue: TSettings,
-    optionValueUpdateCallbacks?: Partial<OptionValueUpdateCallbackMap<TSettings>>,
-): Settings<TSettings> {
-    const storageKey = `dpus_${getScriptId()}_settings`;
-    return new Settings(storageKey, schema, defaultValue, optionValueUpdateCallbacks);
-}
+export const GLOBAL_SETTINGS = Settings.create('globalSettings', {
+    debug: new BooleanSetting(false),
+});

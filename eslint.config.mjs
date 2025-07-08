@@ -8,7 +8,7 @@ import tseslint from 'typescript-eslint';
 export default defineConfig([
     js.configs.recommended,
     comments.recommended,
-    tseslint.configs.recommendedTypeChecked,
+    tseslint.configs.strictTypeChecked,
     tseslint.configs.stylisticTypeChecked,
     {
         files: ['**/*.{js,mjs,cjs,ts,mts,cts}'],
@@ -35,6 +35,7 @@ export default defineConfig([
             '@typescript-eslint/explicit-module-boundary-types': 'error',
             '@typescript-eslint/member-ordering': 'warn',
             '@typescript-eslint/no-import-type-side-effects': 'error',
+            '@typescript-eslint/no-invalid-void-type': 'off', // this rule is partially broken so not very useful, see https://github.com/typescript-eslint/typescript-eslint/issues/8113
             '@typescript-eslint/no-shadow': 'warn',
             '@typescript-eslint/no-unnecessary-parameter-property-assignment': 'error',
             '@typescript-eslint/no-unsafe-type-assertion': 'warn',
@@ -42,6 +43,7 @@ export default defineConfig([
             '@typescript-eslint/prefer-readonly': 'warn',
             '@typescript-eslint/promise-function-async': 'error',
             '@typescript-eslint/require-array-sort-compare': 'error',
+            '@typescript-eslint/restrict-template-expressions': ['error', { allowBoolean: true, allowNumber: true }],
             '@typescript-eslint/strict-boolean-expressions': ['error', { allowNumber: false, allowString: false }],
         },
     },

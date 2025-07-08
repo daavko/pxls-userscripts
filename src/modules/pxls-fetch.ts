@@ -1,21 +1,8 @@
 import * as v from 'valibot';
 import { type PxlsInfoResponse, pxlsInfoResponseSchema } from '../pxls/pxls-types';
-import { showErrorMessage } from './message';
-import { getDpus } from './pxls-init';
+import { GLOBAL_MESSENGER } from './message';
 
-declare global {
-    interface DPUS {
-        pxlsFetch: {
-            info?: InfoFetchState;
-        };
-    }
-}
-
-function getDpusPxlsFetch(): DPUS['pxlsFetch'] {
-    const dpus = getDpus();
-    dpus.pxlsFetch ??= {};
-    return dpus.pxlsFetch;
-}
+let PXLS_INFO_FETCH: InfoFetchState | null = null;
 
 interface PendingInfoFetch {
     state: 'pending';
@@ -30,25 +17,25 @@ interface FinishedInfoFetch {
 type InfoFetchState = PendingInfoFetch | FinishedInfoFetch;
 
 export async function getPxlsInfo(): Promise<PxlsInfoResponse | null> {
-    const dpusPxlsFetch = getDpusPxlsFetch();
-    if (dpusPxlsFetch.info) {
-        if (dpusPxlsFetch.info.state === 'pending') {
-            return dpusPxlsFetch.info.promise;
-        } else if (dpusPxlsFetch.info.state === 'finished') {
-            return dpusPxlsFetch.info.data;
+    if (PXLS_INFO_FETCH) {
+        switch (PXLS_INFO_FETCH.state) {
+            case 'pending':
+                return PXLS_INFO_FETCH.promise;
+            case 'finished':
+                return PXLS_INFO_FETCH.data;
         }
     }
 
-    dpusPxlsFetch.info = {
+    PXLS_INFO_FETCH = {
         state: 'pending',
         promise: fetchInfo().catch((error: unknown) => {
             if (error instanceof Error) {
-                showErrorMessage(`Failed to fetch /info`, error);
+                GLOBAL_MESSENGER.showErrorMessage(`Failed to fetch /info`, error);
             }
             return null;
         }),
     };
-    return dpusPxlsFetch.info.promise;
+    return PXLS_INFO_FETCH.promise;
 }
 
 async function fetchInfo(): Promise<PxlsInfoResponse> {
