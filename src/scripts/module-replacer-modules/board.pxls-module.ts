@@ -179,6 +179,8 @@ const board = {
         board.canvas.classList.add('board', 'noselect', 'dpus__mr-board');
         container.appendChild(board.canvas);
     },
+    screenSpaceCoordsToBoardSpace(screenX: number, screenY: number): { x: number; y: number } {},
+    boardSpaceCoordsToScreenSpace(boardX: number, boardY: number): { x: number; y: number } {},
 };
 
 const webGlRenderer = {
@@ -207,16 +209,37 @@ const webGlRenderer = {
     },
 };
 
+type BoardPanMode = 'none' | 'precise' | 'coarse';
+
 const boardPanner = {
     _MIN_PAN_DISTANCE: 5, // minimum distance the "pan point" must move before we can consider this a panning action
     _pointerDownCoordinates: new Map<number, { x: number; y: number }>(),
+    _panMode: 'none' as BoardPanMode,
     _minPanDistanceFuseBroken: false,
     pointerDown(e: PointerEvent): void {
-        // todo: figure out coordinates
-        boardPanner._addPointerId(e.pointerId, 0, 0);
+        if (boardPanner._panMode === 'precise') {
+            return;
+        }
+
+        if (
+            boardPanner._panMode === 'coarse' &&
+            (e.pointerType !== 'touch' || boardPanner._pointerDownCoordinates.size >= 2)
+        ) {
+            return;
+        }
+
+        // we call this screen-space coords, but they're actually relative to the canvas
+        const screenX = e.offsetX;
+        const screenY = e.offsetY;
+        const { x, y } = board.screenSpaceCoordsToBoardSpace(screenX, screenY);
+        boardPanner._addPointer(e, x, y);
         // todo: begin panning or whatever
     },
     pointerMove(e: PointerEvent): void {
+        if (!boardPanner._pointerDownCoordinates.has(e.pointerId)) {
+            return;
+        }
+
         // todo: pan/zoom according to active pointers
     },
     pointerUp(e: PointerEvent): void {
@@ -231,11 +254,24 @@ const boardPanner = {
     get _anyPointerActive(): boolean {
         return boardPanner._pointerDownCoordinates.size > 0;
     },
-    _addPointerId(pointerId: number, x: number, y: number): void {
-        boardPanner._pointerDownCoordinates.set(pointerId, { x, y });
+    _addPointer(event: PointerEvent, x: number, y: number): void {
+        boardPanner._pointerDownCoordinates.set(event.pointerId, { x, y });
+
+        if (boardPanner._panMode === 'none') {
+            if (event.pointerType === 'touch') {
+                boardPanner._panMode = 'coarse';
+            } else {
+                boardPanner._panMode = 'precise';
+            }
+        }
     },
     _removePointerId(pointerId: number): void {
         boardPanner._pointerDownCoordinates.delete(pointerId);
+        if (boardPanner._pointerDownCoordinates.size === 0) {
+            // no pointers left, reset pan state
+            boardPanner._panMode = 'none';
+            boardPanner._minPanDistanceFuseBroken = false;
+        }
     },
 };
 
@@ -649,15 +685,16 @@ const boardExport: PxlsBoardModule = {
         }
     },
     fromScreen: (screenX, screenY, floored = true): { x: number; y: number } => {
-        // todo: implement this
-        return { x: 0, y: 0 };
+        // todo: implement floored?
+        return board.screenSpaceCoordsToBoardSpace(screenX, screenY);
     },
     toScreen: (boardX, boardY): { x: number; y: number } => {
-        // todo: implement this
-        return { x: 0, y: 0 };
+        return board.boardSpaceCoordsToScreenSpace(boardX, boardY);
     },
     save: () => {
-        save();
+        save().catch((e: unknown) => {
+            console.error('Error saving board:', e);
+        });
     },
     centerOn: (x, y, ignoreLock = false): void => {
         if (x != null) {
