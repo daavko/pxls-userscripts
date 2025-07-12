@@ -239,9 +239,9 @@ export class TemplateInfoScript extends PxlsUserscript {
 
             const virginmapPixelData = virginmapContext.getImageData(pixel.x, pixel.y, 1, 1);
             const virginmapPixelDataColor = new Uint32Array(virginmapPixelData.data.buffer);
-            if (virginmapPixelDataColor[0] !== 0) {
+            if (virginmapPixelDataColor[0] === 0) {
                 // pixel was virgin, deduct from virgin abuse count
-                this.templateVirginAbusePixels--;
+                this.templateVirginAbusePixels = Math.max(0, this.templateVirginAbusePixels - 1);
             }
         } else {
             this.templateCompletedPixels--;
