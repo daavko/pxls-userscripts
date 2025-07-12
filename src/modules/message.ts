@@ -38,7 +38,6 @@ export function showMessage(message: string, type: MessageType, duration: number
 }
 
 export function showInfoMessage(message: string, duration = DEFAULT_INFO_MESSAGE_DURATION): void {
-    debug('Showing info message:', message);
     showMessage(message, 'info', duration);
 }
 
