@@ -2,11 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased - Grief tracker, Template color autoselector, Milestone watcher
+## DPUS v1.0.0
 
+- Initial release of the unified Daavko's Pxls Utility Scripts
 - Add a message specific to Brave browser when detemplatization fails, as their tracking protection messes with canvas colors and causes issues
 - Dependency updates
 - Various internal refactors and bugfixes
+
+# Outdated changelogs, before script unification
 
 ## Grief tracker v1.2.0
 
