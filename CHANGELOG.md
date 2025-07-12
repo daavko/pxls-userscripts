@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## DPUS v1.0.1
+
+- Fixed template info script counting virgin abuse into the negatives by accident
+
 ## DPUS v1.0.0
 
 - Initial release of the unified Daavko's Pxls Utility Scripts
