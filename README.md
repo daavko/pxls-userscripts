@@ -37,6 +37,10 @@ Smaller templates are fine, since they don't take as long to decode.
 This should be pretty obvious, but... **this script makes use of flashing animations to highlight things, don't use it
 if you have epilepsy or something similar**
 
+### Template Info
+
+Shows basic template info in the info bubble.
+
 ## License
 
 All scripts in this repository are licensed under the GPLv3 license or any later version. You can find the full license
