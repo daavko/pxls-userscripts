@@ -41,7 +41,7 @@ export class TemplateInfoScript extends PxlsUserscript {
         virginAbusePixels: el('span', ['0']),
         virginAbusePercent: el('span', ['0%']),
     };
-    private readonly templateInfoElement = el('div', { class: 'dpus__template-info' }, [
+    private readonly templateInfoElement = el('div', { class: ['dpus__template-info', 'toggeable'] }, [
         el('p', ['Template: ', this.infoViewElements.totalPixels]),
         el('p', [
             'Completed: ',
