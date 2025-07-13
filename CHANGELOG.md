@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## DPUS v1.0.3
+
+- Hide template info when the info bubble is collapsed
+
 ## DPUS v1.0.2
 
 - Fixed template info script not updating virgin abuse when placed color is not the template color
