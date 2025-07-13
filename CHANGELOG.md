@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## DPUS v1.0.2
+
+- Fixed template info script not updating virgin abuse when placed color is not the template color
+
 ## DPUS v1.0.1
 
 - Fixed template info script counting virgin abuse into the negatives by accident
