@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## DPUS v1.0.4
+
+- Fix virgin abuse calculation not working correctly due to even proessing order when a pixel is placed
+
 ## DPUS v1.0.3
 
 - Hide template info when the info bubble is collapsed
