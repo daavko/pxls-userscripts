@@ -17,12 +17,14 @@ import { AutoColorSelectorScript } from './scripts/auto-color-selector.user';
 import { AvailablePixelsFlasherScript } from './scripts/available-pixels-flasher.user';
 import { GriefTrackerScript } from './scripts/grief-tracker.user';
 import { MilestoneWatcherScript } from './scripts/milestone-watcher.user';
+import { ModuleReplacerScript } from './scripts/module-replacer.user';
 import { TemplateInfoScript } from './scripts/template-info.user';
 import type { PxlsUserscript } from './scripts/userscript';
 
 const messenger = new Messenger('DPUS');
 
 const settings = Settings.create('global', {
+    moduleReplacerEnabled: new BooleanSetting(false),
     templateInfoEnabled: new BooleanSetting(false),
     autoColorSelectorScriptEnabled: new BooleanSetting(false),
     griefTrackerScriptEnabled: new BooleanSetting(false),
@@ -37,6 +39,7 @@ function initSettings(): void {
         createLineBreak(),
         createSubheading('Scripts'),
         createSettingsText('A reload is required for changes to take effect.'),
+        createBooleanSetting(settings.moduleReplacerEnabled, 'Module Replacer'),
         createBooleanSetting(settings.templateInfoEnabled, 'Template Info'),
         createBooleanSetting(settings.autoColorSelectorScriptEnabled, 'Auto Color Selector'),
         createBooleanSetting(settings.griefTrackerScriptEnabled, 'Grief Tracker'),
@@ -62,6 +65,9 @@ async function init(): Promise<void> {
     }
 
     const scripts: PxlsUserscript[] = [];
+    if (settings.moduleReplacerEnabled.get()) {
+        scripts.push(new ModuleReplacerScript());
+    }
     if (settings.templateInfoEnabled.get()) {
         scripts.push(new TemplateInfoScript());
     }

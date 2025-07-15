@@ -2,7 +2,6 @@ import { mdiEyedropper } from '@mdi/js';
 import { Random } from 'random';
 import { debug } from '../modules/debug';
 import { createInfoIcon } from '../modules/info-icon';
-import { Messenger } from '../modules/message';
 import { getApp } from '../modules/pxls-init';
 import { anyColorSelected, getFastLookupPalette, selectColor, unselectColor } from '../modules/pxls-palette';
 import { getCurrentTemplate, TEMPLATE_CHANGE_EVENT_NAME, type TemplateData } from '../modules/pxls-template';
@@ -31,8 +30,6 @@ function randomGriefSeed(): string {
 }
 
 export class AutoColorSelectorScript extends PxlsUserscript {
-    private readonly messenger = new Messenger('Template color autoselector');
-
     private readonly settings = Settings.create('templateColorAutoselector', {
         deselectColorOutsideTemplate: new BooleanSetting(false),
         selectColorWhenDeselectedInsideTemplate: new BooleanSetting(false),
@@ -203,10 +200,10 @@ export class AutoColorSelectorScript extends PxlsUserscript {
     }
 
     private initBodyEventListeners(): void {
-    document.body.addEventListener('keydown', (event) => {
-        if (eventTargetIsTextInput(event)) {
-            return;
-        }
+        document.body.addEventListener('keydown', (event) => {
+            if (eventTargetIsTextInput(event)) {
+                return;
+            }
 
             if (event.key === 'z') {
                 if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
