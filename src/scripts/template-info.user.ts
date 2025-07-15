@@ -30,6 +30,7 @@ export class TemplateInfoScript extends PxlsUserscript {
 
     private templateTotalPixels = 0;
     private templateCompletedPixels = 0;
+    private templateVirginAbusePixelsCollection = new Uint8Array(0);
     private templateVirginAbusePixels = 0;
 
     private readonly infoViewElements = {
@@ -164,6 +165,9 @@ export class TemplateInfoScript extends PxlsUserscript {
         this.templateTotalPixels = 0;
         this.templateCompletedPixels = 0;
         this.templateVirginAbusePixels = 0;
+        this.templateVirginAbusePixelsCollection = new Uint8Array(
+            detemplatizedTemplate.width * detemplatizedTemplate.height,
+        );
         for (let y = 0; y < detemplatizedTemplate.height; y++) {
             const rowStart = y * detemplatizedTemplate.width;
             for (let x = 0; x < detemplatizedTemplate.width; x++) {
@@ -189,6 +193,7 @@ export class TemplateInfoScript extends PxlsUserscript {
                     if (virginmapColor === 0) {
                         // pixel is virgin
                         this.templateVirginAbusePixels++;
+                        this.templateVirginAbusePixelsCollection[pixelIndex] = 1;
                     }
                 }
             }
@@ -199,9 +204,9 @@ export class TemplateInfoScript extends PxlsUserscript {
     }
 
     private pixelPlaced(pixel: PlacedPixelData): void {
-        const { detemplatizedTemplate, detemplatizedTemplateUint32View, virginmapContext, palette } = this;
+        const { detemplatizedTemplate, detemplatizedTemplateUint32View, palette } = this;
         const template = getCurrentTemplate();
-        if (!template || !detemplatizedTemplate || !detemplatizedTemplateUint32View || !virginmapContext) {
+        if (!template || !detemplatizedTemplate || !detemplatizedTemplateUint32View) {
             return;
         }
 
@@ -240,11 +245,10 @@ export class TemplateInfoScript extends PxlsUserscript {
             this.templateCompletedPixels--;
         }
 
-        const virginmapPixelData = virginmapContext.getImageData(pixel.x, pixel.y, 1, 1);
-        const virginmapPixelDataColor = new Uint32Array(virginmapPixelData.data.buffer);
-        if (virginmapPixelDataColor[0] === 0) {
+        if (this.templateVirginAbusePixelsCollection[pixelIndex] === 1) {
             // pixel was virgin, deduct from virgin abuse count
-            this.templateVirginAbusePixels = Math.max(0, this.templateVirginAbusePixels - 1);
+            this.templateVirginAbusePixels--;
+            this.templateVirginAbusePixelsCollection[pixelIndex] = 0;
         }
 
         this.updateUI();
