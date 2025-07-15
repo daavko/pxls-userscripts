@@ -5,7 +5,6 @@ import { debug, debugTime } from '../modules/debug';
 import { addStylesheet } from '../modules/document';
 import { el } from '../modules/html';
 import { createInfoIcon } from '../modules/info-icon';
-import { Messenger } from '../modules/message';
 import { getFastLookupPalette } from '../modules/pxls-palette';
 import { getCurrentTemplate, TEMPLATE_CHANGE_EVENT_NAME, type TemplateData } from '../modules/pxls-template';
 import {
@@ -94,8 +93,6 @@ class GriefAnimationSpeedSetting extends SettingBase<GriefAnimationSpeed, string
 }
 
 export class GriefTrackerScript extends PxlsUserscript {
-    private readonly messenger = new Messenger('Grief tracker');
-
     private readonly settings = Settings.create('griefTracker', {
         enabled: new BooleanSetting(true, [
             (_, newValue): void => {

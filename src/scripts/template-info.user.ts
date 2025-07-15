@@ -1,7 +1,6 @@
 import { debug, debugTime } from '../modules/debug';
 import { addStylesheet } from '../modules/document';
 import { el } from '../modules/html';
-import { Messenger } from '../modules/message';
 import { getFastLookupPalette } from '../modules/pxls-palette';
 import { getCurrentTemplate, TEMPLATE_CHANGE_EVENT_NAME, type TemplateData } from '../modules/pxls-template';
 import {
@@ -18,8 +17,6 @@ import templateInfoStyles from './template-info.user.css';
 import { PxlsUserscript } from './userscript';
 
 export class TemplateInfoScript extends PxlsUserscript {
-    private readonly messenger = new Messenger('Template info');
-
     private palette: number[] = [];
 
     private detemplatizedTemplate: ImageData | null = null;

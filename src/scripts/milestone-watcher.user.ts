@@ -1,5 +1,4 @@
 import * as v from 'valibot';
-import { Messenger } from '../modules/message';
 import { getApp, waitForApp } from '../modules/pxls-init';
 import { BooleanSetting, SettingBase, Settings, type SettingUpdateCallback } from '../modules/settings';
 import {
@@ -32,8 +31,6 @@ class MilestoneSetting extends SettingBase<number[], string> {
 }
 
 export class MilestoneWatcherScript extends PxlsUserscript {
-    private readonly messenger = new Messenger('Milestone watcher');
-
     private readonly settings = Settings.create('milestoneWatcher', {
         currentCanvasMilestones: new MilestoneSetting([69, 420, 727, 1337, 10000]),
         allTimeMilestones: new MilestoneSetting([727727]),
