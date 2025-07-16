@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## DPUS v1.1.0
+
+- Add message on first run that explains where to enable scripts
+
 ## DPUS v1.0.4
 
 - Fix virgin abuse calculation not working correctly due to even proessing order when a pixel is placed
