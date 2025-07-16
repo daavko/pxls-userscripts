@@ -42,6 +42,16 @@ function initSettings(): void {
     ]);
 }
 
+const FIRST_LAUNCH_KEY = 'dpus_first_launch';
+
+function dpusHasBeenLaunchedBefore(): boolean {
+    return window.localStorage.getItem(FIRST_LAUNCH_KEY) !== null;
+}
+
+function setDpusHasBeenLaunchedBefore(): void {
+    window.localStorage.setItem(FIRST_LAUNCH_KEY, 'true');
+}
+
 async function init(): Promise<void> {
     if (window.App) {
         messenger.showErrorMessage('Pxls is already initialized, DPUS cannot initialize at this point.');
@@ -59,6 +69,10 @@ async function init(): Promise<void> {
     }
     if (settings.milestoneWatcherScriptEnabled.get()) {
         scripts.push(new MilestoneWatcherScript());
+    }
+
+    if (scripts.length > 0) {
+        setDpusHasBeenLaunchedBefore();
     }
 
     const failedScripts = new Set<string>();
@@ -121,6 +135,15 @@ async function init(): Promise<void> {
     if (failedScripts.size > 0) {
         debug(`Failed to initialize scripts: ${Array.from(failedScripts).join(', ')}`);
     }
+
+    if (!dpusHasBeenLaunchedBefore()) {
+        messenger.showInfoMessage(
+            'Please check the bottom of Pxls settings to enable or disable available scripts',
+            10_000,
+        );
+    }
+
+    setDpusHasBeenLaunchedBefore();
 }
 
 init().catch((e: unknown) => {
