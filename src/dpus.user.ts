@@ -1,3 +1,4 @@
+import { isUserBanned } from './modules/banlist';
 import { debug } from './modules/debug';
 import { Messenger } from './modules/message';
 import { waitForApp } from './modules/pxls-init';
@@ -95,6 +96,15 @@ async function init(): Promise<void> {
     }
 
     const app = await waitForApp();
+
+    try {
+        if (await isUserBanned(app.user.getUsername())) {
+            messenger.showErrorMessage('You are banned from using this script.');
+            return;
+        }
+    } catch (e: unknown) {
+        debug('Failed to check if user is banned:', e);
+    }
 
     if (Reflect.has(window, 'dpus')) {
         messenger.showErrorMessage('Found old scripts, please remove them before using the unified Utility Scripts.');
