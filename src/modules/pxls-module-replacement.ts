@@ -14,29 +14,12 @@ import {
 } from 'acorn';
 import type { PxlsModules } from '../pxls/pxls-modules';
 import { debug } from './debug';
-import { hash } from './hash';
-import { showErrorMessage } from './message';
-import { getDpus } from './pxls-init';
+import { hashString } from './hash';
 
-declare global {
-    interface DPUS {
-        moduleReplacement: {
-            originalScriptBlockerInstalled: boolean;
-            expectedJsHash: string | null;
-            replacements: ModuleReplacement[];
-        };
-    }
-}
-
-function getDpusModuleReplacement(): DPUS['moduleReplacement'] {
-    const dpus = getDpus();
-    dpus.moduleReplacement ??= {
-        originalScriptBlockerInstalled: false,
-        expectedJsHash: null,
-        replacements: [],
-    };
-    return dpus.moduleReplacement;
-}
+let ORIGINAL_SCRIPT_BLOCKER_INSTALLED = false;
+let MODULE_REPLACEMENT_PROMISE: Promise<void> | null = null;
+let EXPECTED_JS_HASH: string | null = null;
+const MODULE_REPLACEMENTS: ModuleReplacement[] = [];
 
 export interface ModuleReplacement {
     moduleName: keyof PxlsModules;
@@ -46,22 +29,51 @@ export interface ModuleReplacement {
 export function registerModuleReplacement(expectedJsHash: string, replacement: ModuleReplacement): void {
     maybeInstallOriginalScriptBlocker();
 
-    const dpusModuleReplacement = getDpusModuleReplacement();
-
-    if (dpusModuleReplacement.expectedJsHash == null) {
-        dpusModuleReplacement.expectedJsHash = expectedJsHash;
-    } else if (dpusModuleReplacement.expectedJsHash !== expectedJsHash) {
+    if (EXPECTED_JS_HASH == null) {
+        EXPECTED_JS_HASH = expectedJsHash;
+    } else if (EXPECTED_JS_HASH !== expectedJsHash) {
         throw new Error(
-            `Module replacement expected hash ${expectedJsHash} does not match current expected hash ${dpusModuleReplacement.expectedJsHash}`,
+            `Module replacement expected hash ${expectedJsHash} does not match current expected hash ${EXPECTED_JS_HASH}`,
         );
     }
 
-    const existingReplacement = dpusModuleReplacement.replacements.some((r) => r.moduleName === replacement.moduleName);
+    const existingReplacement = MODULE_REPLACEMENTS.some((r) => r.moduleName === replacement.moduleName);
     if (existingReplacement) {
         throw new Error(`Module replacement for index ${replacement.moduleName} already registered`);
     }
-    dpusModuleReplacement.replacements.push(replacement);
+    MODULE_REPLACEMENTS.push(replacement);
     debug('registered module replacement', replacement.moduleName, expectedJsHash);
+}
+
+export async function waitForModuleReplacement(): Promise<void> {
+    if (MODULE_REPLACEMENT_PROMISE) {
+        return MODULE_REPLACEMENT_PROMISE;
+    }
+
+    const { promise, resolve, reject } = Promise.withResolvers<void>();
+    MODULE_REPLACEMENT_PROMISE = promise;
+
+    window.addEventListener('load', () => {
+        jsLoadObserver.disconnect();
+        debug('pxls.js script blocker disconnected');
+
+        if (window.App) {
+            reject(new Error('pxls.js script blocker installed after App loaded'));
+            return;
+        }
+
+        if (EXPECTED_JS_HASH != null) {
+            runModuleReplacement(EXPECTED_JS_HASH, MODULE_REPLACEMENTS)
+                .then(() => {
+                    resolve();
+                })
+                .catch((e: unknown) => {
+                    reject(new Error('pxls.js module replacement failed', { cause: e }));
+                });
+        }
+    });
+
+    return promise;
 }
 
 const jsLoadObserver = new MutationObserver((mutations) => {
@@ -73,9 +85,9 @@ const jsLoadObserver = new MutationObserver((mutations) => {
         const scriptSrc = node.src;
         if (scriptSrc === location.origin + '/pxls.js') {
             debug('found pxls.js script node');
-            node.addEventListener('load', () => {
-                // todo: somehow the node loaded even though we changed the type, throw an error
-            });
+            // node.addEventListener('load', () => {
+            //     // todo: somehow the node loaded even though we changed the type, throw an error
+            // });
             node.type = 'none/blocked';
         }
     }
@@ -86,32 +98,13 @@ function maybeInstallOriginalScriptBlocker(): void {
         throw new Error('Attempted to install pxls.js script blocker after document load');
     }
 
-    const dpusModuleReplacement = getDpusModuleReplacement();
-    if (dpusModuleReplacement.originalScriptBlockerInstalled) {
+    if (ORIGINAL_SCRIPT_BLOCKER_INSTALLED) {
         return;
     }
+
     jsLoadObserver.observe(document.documentElement, { childList: true, subtree: true });
-    dpusModuleReplacement.originalScriptBlockerInstalled = true;
+    ORIGINAL_SCRIPT_BLOCKER_INSTALLED = true;
     debug('pxls.js script blocker installed');
-
-    window.addEventListener('load', () => {
-        jsLoadObserver.disconnect();
-        debug('pxls.js script blocker disconnected');
-
-        if (window.App) {
-            showErrorMessage('pxls.js somehow loaded after blocker installed');
-            return;
-        }
-
-        if (dpusModuleReplacement.expectedJsHash != null) {
-            runModuleReplacement(dpusModuleReplacement.expectedJsHash, dpusModuleReplacement.replacements).catch(
-                (e) => {
-                    const errorMessage = 'pxls.js module replacement failed';
-                    showErrorMessage(errorMessage, new Error(errorMessage, { cause: e }));
-                },
-            );
-        }
-    });
 }
 
 function createModuleReplacementFunctionSrc(replacementSrc: string): string {
@@ -121,8 +114,7 @@ function createModuleReplacementFunctionSrc(replacementSrc: string): string {
 async function runModuleReplacement(expectedHash: string, replacements: ModuleReplacement[]): Promise<void> {
     debug('running module replacement', expectedHash, replacements);
     const scriptText = await loadPxlsJs();
-    const scriptTextBuffer = new TextEncoder().encode(scriptText);
-    const scriptHash = await hash(scriptTextBuffer);
+    const scriptHash = await hashString(scriptText);
 
     if (expectedHash !== scriptHash) {
         throw new Error(`pxls.js hash ${scriptHash} does not match expected hash ${expectedHash}`);
@@ -147,6 +139,7 @@ async function runModuleReplacement(expectedHash: string, replacements: ModuleRe
         // all code before the module
         codeParts.push(scriptText.slice(lastEnd, module.start));
 
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- safe
         const replacement = replacements.find((r) => r.moduleName === module.name)!;
         codeParts.push(createModuleReplacementFunctionSrc(replacement.replacementFunctionSrc));
 
@@ -316,6 +309,7 @@ function createModuleGraph(modules: WebpackModule[], entryPoint: number): Resolv
     const resolvedModules: ResolvedWebpackModule[] = [];
 
     while (replaceableModules.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- safe
         const [moduleName, moduleId] = replaceableModules.pop()!;
 
         if (processedModuleIds.has(moduleId)) {

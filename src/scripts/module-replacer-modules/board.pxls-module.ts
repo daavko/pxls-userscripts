@@ -138,9 +138,6 @@ const board = {
         board._initializedSize = true;
     },
     setPixel(x: number, y: number, color: number, colorMode: 'index' | 'rgba'): void {
-        if (board._int32View == null || x < 0 || x >= board.width || y < 0 || y >= board.height) {
-            return;
-        }
         x = Math.floor(x);
         y = Math.floor(y);
         board.setPixelIndex(y * board.width + x, color, colorMode);
@@ -565,7 +562,9 @@ const start = (): void => {
             place.setPalette(data.palette);
             template.webinit(data);
             uiHelper.setMax(data.maxStacked);
-            chat.webinit(data).catch((e) => console.error(e));
+            chat.webinit(data).catch((e: unknown) => {
+                console.error(e);
+            });
             uiHelper.initBanner(data.chatBannerText);
             if (data.captchaKey != null) {
                 $('.g-recaptcha').attr('data-sitekey', data.captchaKey);
@@ -587,7 +586,7 @@ const start = (): void => {
                     title: query.get('title') ?? '',
                     url: templateUrl,
                     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- original code does this
-                    convertMode: (query.get('convert') as PxlsAppTemplateConvertMode) ?? 'nearestCustom',
+                    convertMode: (query.get('convert') as PxlsAppTemplateConvertMode | undefined) ?? 'nearestCustom',
                 });
             }
 
