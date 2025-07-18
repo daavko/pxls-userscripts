@@ -6,19 +6,37 @@ import { getApp } from '../modules/pxls-init';
 import { anyColorSelected, getFastLookupPalette, selectColor, unselectColor } from '../modules/pxls-palette';
 import { getCurrentTemplate, TEMPLATE_CHANGE_EVENT_NAME, type TemplateData } from '../modules/pxls-template';
 import { getPxlsUIBoard, getPxlsUIMouseCoords } from '../modules/pxls-ui';
-import { BooleanSetting, Settings } from '../modules/settings';
+import { BooleanSetting, Settings, StringSetting } from '../modules/settings';
 import {
     createBooleanSetting,
     createKeyboardShortcutText,
     createLineBreak,
+    createSettingsButton,
     createSettingsResetButton,
     createSettingsUI,
+    createStringSetting,
     createSubheading,
 } from '../modules/settings-ui';
 import { detemplatizeImage, getTemplateImage } from '../modules/template';
+import { isUserInList } from '../modules/userlist';
+import type { PxlsApp } from '../pxls/pxls-global';
 import { PxlsUserscript } from './userscript';
 
 const COORDS_REGEX = /^\(([0-9]+), ([0-9]+)\)$/;
+
+function randomGriefSeed(): string {
+    return window.crypto.randomUUID().replaceAll('-', '');
+}
+
+function stringToBigInt(str: string): bigint {
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(str);
+    let result = BigInt(0);
+    for (const byte of bytes) {
+        result = (result << BigInt(8)) | BigInt(byte);
+    }
+    return result;
+}
 
 export class AutoColorSelectorScript extends PxlsUserscript {
     private readonly messenger = new Messenger('Template color autoselector');
@@ -26,6 +44,12 @@ export class AutoColorSelectorScript extends PxlsUserscript {
     private readonly settings = Settings.create('templateColorAutoselector', {
         deselectColorOutsideTemplate: new BooleanSetting(false),
         selectColorWhenDeselectedInsideTemplate: new BooleanSetting(false),
+        griefMode: new BooleanSetting(false),
+        griefSeed: new StringSetting(randomGriefSeed(), [
+            (_oldValue, newValue): void => {
+                this.griefSeed = stringToBigInt(newValue);
+            },
+        ]),
     });
 
     private palette: number[] = [];
@@ -57,12 +81,25 @@ export class AutoColorSelectorScript extends PxlsUserscript {
         ],
     });
 
+    private userAllowedToGrief = false;
+    private griefSeed = stringToBigInt(this.settings.griefSeed.get());
+
     constructor() {
-        super('Template Color Autoselector', undefined, async () => this.initAfterApp());
+        super('Template Color Autoselector', undefined, async (app) => this.initAfterApp(app));
     }
 
-    private async initAfterApp(): Promise<void> {
+    private async initAfterApp(app: PxlsApp): Promise<void> {
         this.palette = await getFastLookupPalette();
+
+        try {
+            this.userAllowedToGrief = await isUserInList(
+                app.user.getUsername(),
+                'https://pxls.daavko.moe/userscripts/auto-color-selector-grief-whitelist.json',
+            );
+        } catch (e) {
+            debug('Failed to check if user is allowed to grief:', e);
+            this.userAllowedToGrief = false;
+        }
 
         this.infoIcon.addToIconsContainer();
         this.initSettings();
@@ -105,6 +142,17 @@ export class AutoColorSelectorScript extends PxlsUserscript {
     }
 
     private initSettings(): void {
+        let griefSettingsUi: HTMLElement[] = [];
+        if (this.userAllowedToGrief) {
+            griefSettingsUi = [
+                createBooleanSetting(this.settings.griefMode, 'Enable grief mode'),
+                createStringSetting(this.settings.griefSeed, 'Grief seed'),
+                createSettingsButton('Random seed', () => {
+                    this.settings.griefSeed.set(randomGriefSeed());
+                }),
+            ];
+        }
+
         createSettingsUI('templateColorAutoselector', 'DPUS Template Color Autoselector', () => [
             createSubheading('Keybinds'),
             createKeyboardShortcutText('Z', 'Toggle auto-select color'),
@@ -115,6 +163,7 @@ export class AutoColorSelectorScript extends PxlsUserscript {
                 this.settings.selectColorWhenDeselectedInsideTemplate,
                 'Select color when deselected inside template',
             ),
+            ...griefSettingsUi,
             createSettingsResetButton(this.settings),
         ]);
     }
@@ -263,11 +312,22 @@ export class AutoColorSelectorScript extends PxlsUserscript {
             return;
         }
 
-        if (this.settings.selectColorWhenDeselectedInsideTemplate.get()) {
-            selectColor(paletteColorIndex);
+        if (this.userAllowedToGrief && this.settings.griefMode.get() && this.settings.griefSeed.get() !== '') {
+            const bigIntX = BigInt(x);
+            const bigIntY = BigInt(y);
+
+            // only colors that are *not* in the template
+            const griefColors = this.palette.filter((_color, index) => index !== paletteColorIndex);
+            const base = this.griefSeed * bigIntX * bigIntY;
+            const griefColorIndex = Number(base % BigInt(griefColors.length));
+            selectColor(griefColorIndex);
         } else {
-            if (anyColorSelected()) {
+            if (this.settings.selectColorWhenDeselectedInsideTemplate.get()) {
                 selectColor(paletteColorIndex);
+            } else {
+                if (anyColorSelected()) {
+                    selectColor(paletteColorIndex);
+                }
             }
         }
     }
