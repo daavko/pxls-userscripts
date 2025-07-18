@@ -30,12 +30,7 @@ function randomGriefSeed(): string {
 
 function stringToBigInt(str: string): bigint {
     const encoder = new TextEncoder();
-    const bytes = encoder.encode(str);
-    let result = BigInt(0);
-    for (const byte of bytes) {
-        result = (result << BigInt(8)) | BigInt(byte);
-    }
-    return result;
+    return encoder.encode(str).reduce((acc, byte) => (acc << BigInt(8)) | BigInt(byte), BigInt(0));
 }
 
 export class AutoColorSelectorScript extends PxlsUserscript {
