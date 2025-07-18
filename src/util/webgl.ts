@@ -87,6 +87,7 @@ export class CanvasResizeWatcher {
 
     private readonly onResize = (entries: ResizeObserverEntry[]): void => {
         for (const entry of entries) {
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- not true
             if (entry.devicePixelContentBoxSize != null) {
                 this.lastKnownWidth = entry.devicePixelContentBoxSize[0].inlineSize;
                 this.lastKnownHeight = entry.devicePixelContentBoxSize[0].blockSize;

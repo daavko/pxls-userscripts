@@ -63,6 +63,10 @@ class WebSocketProxy extends window.WebSocket {
         }
     }
 
+    override send(): void {
+        console.debug('WebSocketProxy tried to send');
+    }
+
     readonly #handleMessage = (event: MessageEvent<unknown>): void => {
         const pixelPlacedData = v.safeParse(pixelPlacedMessageSchema, event.data);
         if (pixelPlacedData.success) {

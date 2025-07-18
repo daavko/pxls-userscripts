@@ -1,4 +1,9 @@
-import { type ModuleReplacement, registerModuleReplacement } from '../modules/pxls-module-replacement';
+import {
+    type ModuleReplacement,
+    registerModuleReplacement,
+    waitForModuleReplacement,
+} from '../modules/pxls-module-replacement';
+import { bindWebSocketProxy } from '../modules/websocket';
 import boardModuleFnSrc from './module-replacer-modules/board.pxls-module';
 import chromeOffsetWorkaroundModuleFnSrc from './module-replacer-modules/chrome-offset-workaround.pxls-module';
 import { PxlsUserscript } from './userscript';
@@ -19,6 +24,20 @@ export class ModuleReplacerScript extends PxlsUserscript {
     constructor() {
         super('Module replacer', () => {
             this.registerModuleReplacements();
+            bindWebSocketProxy();
+            waitForModuleReplacement().catch((e: unknown) => {
+                if (e instanceof Error) {
+                    this.messenger.showErrorMessage(
+                        `An error occurred while waiting for module replacement: ${e.message}`,
+                        e,
+                    );
+                } else {
+                    this.messenger.showErrorMessage(
+                        'An unknown error occurred while waiting for module replacement.',
+                        new Error('Unknown error', { cause: e }),
+                    );
+                }
+            });
         });
     }
 
