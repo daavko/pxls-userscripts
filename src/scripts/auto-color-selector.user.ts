@@ -303,7 +303,6 @@ export class AutoColorSelectorScript extends PxlsUserscript {
             const griefColors = this.palette.filter((_color, index) => index !== paletteColorIndex);
             const rand = new Random(`${this.settings.griefSeed.get()}${x}${y}`);
             const griefColorIndex = rand.int(0, griefColors.length - 1);
-            console.log(griefColors, rand, griefColorIndex);
             selectColor(griefColorIndex);
         } else {
             if (this.settings.selectColorWhenDeselectedInsideTemplate.get()) {
