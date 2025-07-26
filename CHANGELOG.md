@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## DPUS v1.3.1
+
+- Remove leftover debugging code
+
 ## DPUS v1.3.0
 
 - Make wrong color selector mode use a real seedable RNG
