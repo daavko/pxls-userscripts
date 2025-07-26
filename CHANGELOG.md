@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## DPUS v1.3.0
+
+- Make wrong color selector mode use a real seedable RNG
+
 ## DPUS v1.2.0
 
 - Add wrong color selector mode to auto color selector, which allows you to select a color that is _not_ on the template
