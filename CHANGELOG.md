@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## DPUS v1.3.2
+
+- Fix wrong color selector sometimes picking the "correct" color
+
 ## DPUS v1.3.1
 
 - Remove leftover debugging code
