@@ -300,10 +300,12 @@ export class AutoColorSelectorScript extends PxlsUserscript {
 
         if (this.userAllowedToGrief && this.settings.griefMode.get() && this.settings.griefSeed.get() !== '') {
             // only colors that are *not* in the template
-            const griefColors = this.palette.filter((_color, index) => index !== paletteColorIndex);
+            const griefColorIndexes = this.palette
+                .map((_color, index) => index)
+                .filter((index) => index !== paletteColorIndex);
             const rand = new Random(`${this.settings.griefSeed.get()}${x}${y}`);
-            const griefColorIndex = rand.int(0, griefColors.length - 1);
-            selectColor(griefColorIndex);
+            const randIndex = rand.int(0, griefColorIndexes.length - 1);
+            selectColor(griefColorIndexes[randIndex]);
         } else {
             if (this.settings.selectColorWhenDeselectedInsideTemplate.get()) {
                 selectColor(paletteColorIndex);
