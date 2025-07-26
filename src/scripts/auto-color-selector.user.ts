@@ -1,4 +1,5 @@
 import { mdiEyedropper } from '@mdi/js';
+import { Random } from 'random';
 import { debug } from '../modules/debug';
 import { createInfoIcon } from '../modules/info-icon';
 import { Messenger } from '../modules/message';
@@ -28,11 +29,6 @@ function randomGriefSeed(): string {
     return window.crypto.randomUUID().replaceAll('-', '');
 }
 
-function stringToBigInt(str: string): bigint {
-    const encoder = new TextEncoder();
-    return encoder.encode(str).reduce((acc, byte) => (acc << BigInt(8)) | BigInt(byte), BigInt(0));
-}
-
 export class AutoColorSelectorScript extends PxlsUserscript {
     private readonly messenger = new Messenger('Template color autoselector');
 
@@ -40,11 +36,7 @@ export class AutoColorSelectorScript extends PxlsUserscript {
         deselectColorOutsideTemplate: new BooleanSetting(false),
         selectColorWhenDeselectedInsideTemplate: new BooleanSetting(false),
         griefMode: new BooleanSetting(false),
-        griefSeed: new StringSetting(randomGriefSeed(), [
-            (_oldValue, newValue): void => {
-                this.griefSeed = stringToBigInt(newValue);
-            },
-        ]),
+        griefSeed: new StringSetting(randomGriefSeed()),
     });
 
     private palette: number[] = [];
@@ -77,7 +69,6 @@ export class AutoColorSelectorScript extends PxlsUserscript {
     });
 
     private userAllowedToGrief = false;
-    private griefSeed = stringToBigInt(this.settings.griefSeed.get());
 
     constructor() {
         super('Template Color Autoselector', undefined, async (app) => this.initAfterApp(app));
@@ -308,13 +299,11 @@ export class AutoColorSelectorScript extends PxlsUserscript {
         }
 
         if (this.userAllowedToGrief && this.settings.griefMode.get() && this.settings.griefSeed.get() !== '') {
-            const bigIntX = BigInt(x);
-            const bigIntY = BigInt(y);
-
             // only colors that are *not* in the template
             const griefColors = this.palette.filter((_color, index) => index !== paletteColorIndex);
-            const base = this.griefSeed * bigIntX * bigIntY;
-            const griefColorIndex = Number(base % BigInt(griefColors.length));
+            const rand = new Random(`${this.settings.griefSeed.get()}${x}${y}`);
+            const griefColorIndex = rand.int(0, griefColors.length - 1);
+            console.log(griefColors, rand, griefColorIndex);
             selectColor(griefColorIndex);
         } else {
             if (this.settings.selectColorWhenDeselectedInsideTemplate.get()) {
