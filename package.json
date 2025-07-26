@@ -27,6 +27,7 @@
     "sideEffects": false,
     "dependencies": {
         "@mdi/js": "^7.4.47",
+        "random": "^5.4.1",
         "valibot": "^1.1.0"
     }
 }
