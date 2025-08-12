@@ -1,6 +1,8 @@
 import * as v from 'valibot';
 import { hashString } from './hash';
 
+const INSTANCES_WITH_ALLOWLISTS = ['ab10500ac232304f4902cb31373514a9fda011da5eccc5c68751553385540825'];
+
 const LIST_REQUESTS = new Map<string, string[]>();
 
 const userListSchema = v.array(v.string());
@@ -25,6 +27,11 @@ async function fetchUserList(url: string): Promise<string[]> {
     } else {
         throw new Error('Failed to parse user list response', { cause: userListParseResult.issues });
     }
+}
+
+export async function instanceUsesAllowlists(): Promise<boolean> {
+    const hash = await hashString(window.location.origin);
+    return INSTANCES_WITH_ALLOWLISTS.includes(hash);
 }
 
 export async function isUserInList(username: string, url: string): Promise<boolean> {
