@@ -98,8 +98,8 @@ async function init(): Promise<void> {
     const app = await waitForApp();
 
     try {
-        if (await isUserInList(app.user.getUsername(), 'https://pxls.daavko.moe/userscripts/banlist.json')) {
-            messenger.showErrorMessage('You are banned from using this script.');
+        if (!(await isUserInList(app.user.getUsername(), 'https://pxls.daavko.moe/userscripts/allowlist.json'))) {
+            messenger.showErrorMessage('You are not allowed to use this script.');
             return;
         }
     } catch (e: unknown) {
