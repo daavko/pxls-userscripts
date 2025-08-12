@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## DPUS v1.4.1
+
+- Only use allowlists on some hardcoded origins
+
 ## DPUS v1.4.0
 
 - Change from a blocklist system to an allowlist system
