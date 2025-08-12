@@ -12,7 +12,7 @@ import {
     createSettingsUI,
     createSubheading,
 } from './modules/settings-ui';
-import { isUserInList } from './modules/userlist';
+import { instanceUsesAllowlists, isUserInList } from './modules/userlist';
 import { AutoColorSelectorScript } from './scripts/auto-color-selector.user';
 import { GriefTrackerScript } from './scripts/grief-tracker.user';
 import { MilestoneWatcherScript } from './scripts/milestone-watcher.user';
@@ -97,13 +97,15 @@ async function init(): Promise<void> {
 
     const app = await waitForApp();
 
-    try {
-        if (!(await isUserInList(app.user.getUsername(), 'https://pxls.daavko.moe/userscripts/allowlist.json'))) {
-            messenger.showErrorMessage('You are not allowed to use this script.');
-            return;
+    if (await instanceUsesAllowlists()) {
+        try {
+            if (!(await isUserInList(app.user.getUsername(), 'https://pxls.daavko.moe/userscripts/allowlist.json'))) {
+                messenger.showErrorMessage('You are not allowed to use this script.');
+                return;
+            }
+        } catch (e: unknown) {
+            debug('Failed to check if user is banned:', e);
         }
-    } catch (e: unknown) {
-        debug('Failed to check if user is banned:', e);
     }
 
     if (Reflect.has(window, 'dpus')) {

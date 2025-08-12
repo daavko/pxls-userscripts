@@ -19,7 +19,7 @@ import {
     createSubheading,
 } from '../modules/settings-ui';
 import { detemplatizeImage, getTemplateImage } from '../modules/template';
-import { isUserInList } from '../modules/userlist';
+import { instanceUsesAllowlists, isUserInList } from '../modules/userlist';
 import type { PxlsApp } from '../pxls/pxls-global';
 import { PxlsUserscript } from './userscript';
 
@@ -77,14 +77,19 @@ export class AutoColorSelectorScript extends PxlsUserscript {
     private async initAfterApp(app: PxlsApp): Promise<void> {
         this.palette = await getFastLookupPalette();
 
-        try {
-            this.userAllowedToGrief = await isUserInList(
-                app.user.getUsername(),
-                'https://pxls.daavko.moe/userscripts/auto-color-selector-grief-whitelist.json',
-            );
-        } catch (e) {
-            debug('Failed to check if user is allowed to grief:', e);
-            this.userAllowedToGrief = false;
+        if (await instanceUsesAllowlists()) {
+            try {
+                this.userAllowedToGrief = await isUserInList(
+                    app.user.getUsername(),
+                    'https://pxls.daavko.moe/userscripts/auto-color-selector-grief-whitelist.json',
+                );
+            } catch (e) {
+                debug('Failed to check if user is allowed to grief:', e);
+                this.userAllowedToGrief = false;
+            }
+        } else {
+            // let people do whatever they want
+            this.userAllowedToGrief = true;
         }
 
         this.infoIcon.addToIconsContainer();
