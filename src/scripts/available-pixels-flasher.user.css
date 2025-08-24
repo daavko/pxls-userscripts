@@ -1,0 +1,9 @@
+.dpus__stack-flasher {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+}
+
+.dpus__stack-flasher--hidden {
+    display: none;
+}
