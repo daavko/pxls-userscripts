@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Make it possible to use alpha in colors in the flasher script
+
 ## DPUS v1.5.0
 
 - Add script that flashes the screen when a pixel is available
