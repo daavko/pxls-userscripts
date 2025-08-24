@@ -14,6 +14,7 @@ import {
 } from './modules/settings-ui';
 import { instanceUsesAllowlists, isUserInList } from './modules/userlist';
 import { AutoColorSelectorScript } from './scripts/auto-color-selector.user';
+import { AvailablePixelsFlasherScript } from './scripts/available-pixels-flasher.user';
 import { GriefTrackerScript } from './scripts/grief-tracker.user';
 import { MilestoneWatcherScript } from './scripts/milestone-watcher.user';
 import { TemplateInfoScript } from './scripts/template-info.user';
@@ -26,6 +27,7 @@ const settings = Settings.create('global', {
     autoColorSelectorScriptEnabled: new BooleanSetting(false),
     griefTrackerScriptEnabled: new BooleanSetting(false),
     milestoneWatcherScriptEnabled: new BooleanSetting(false),
+    availablePixelsFlasherEnabled: new BooleanSetting(false),
 });
 
 function initSettings(): void {
@@ -39,6 +41,7 @@ function initSettings(): void {
         createBooleanSetting(settings.autoColorSelectorScriptEnabled, 'Auto Color Selector'),
         createBooleanSetting(settings.griefTrackerScriptEnabled, 'Grief Tracker'),
         createBooleanSetting(settings.milestoneWatcherScriptEnabled, 'Milestone Watcher'),
+        createBooleanSetting(settings.availablePixelsFlasherEnabled, 'Available Pixels Flasher'),
         createSettingsResetButton(settings),
     ]);
 }
@@ -70,6 +73,9 @@ async function init(): Promise<void> {
     }
     if (settings.milestoneWatcherScriptEnabled.get()) {
         scripts.push(new MilestoneWatcherScript());
+    }
+    if (settings.availablePixelsFlasherEnabled.get()) {
+        scripts.push(new AvailablePixelsFlasherScript());
     }
 
     if (scripts.length > 0) {

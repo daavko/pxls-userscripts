@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- Add script that flashes the screen when a pixel is available
+
 ## DPUS v1.4.1
 
 - Only use allowlists on some hardcoded origins
