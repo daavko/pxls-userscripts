@@ -8,7 +8,8 @@
         "format": "prettier --write .",
         "check-format": "prettier --check .",
         "typecheck": "tsc --noEmit",
-        "build": "node build.js src/dpus.user.ts"
+        "build": "node build.js src/dpus.user.ts",
+        "watch": "node build.js src/dpus.user.ts --watch"
     },
     "devDependencies": {
         "@eslint-community/eslint-plugin-eslint-comments": "^4.5.0",
