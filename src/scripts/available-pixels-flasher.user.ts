@@ -5,18 +5,12 @@ import { el } from '../modules/html';
 import { Messenger } from '../modules/message';
 import { getPxlsUIPlaceableCount } from '../modules/pxls-ui';
 import { BooleanSetting, SettingBase, Settings, type SettingUpdateCallback } from '../modules/settings';
-import {
-    createBooleanSetting,
-    createLineBreak,
-    createSettingsText,
-    createSettingsUI,
-    createStringSetting,
-} from '../modules/settings-ui';
+import { createBooleanSetting, createLineBreak, createSettingsUI, createStringSetting } from '../modules/settings-ui';
 import availablePixelsFlasherStyles from './available-pixels-flasher.user.css';
 import { PxlsUserscript } from './userscript';
 
 const flashKeyframeSchema = v.tuple([
-    v.pipe(v.string(), v.regex(/^#[0-9a-fA-F]{6}$/)),
+    v.pipe(v.string(), v.regex(/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/)),
     v.pipe(v.number(), v.safeInteger(), v.minValue(1)),
 ]);
 
@@ -97,9 +91,10 @@ export class AvailablePixelsFlasherScript extends PxlsUserscript {
             createBooleanSetting(settings.flashOnStackGain, 'Flash when stack increases above 1'),
             createLineBreak(),
             createStringSetting(settings.flashKeyframes, 'Flash keyframes'),
-            createSettingsText(
-                'Format: #RRGGBB,DURATION ... (space separated) Example: #FFFFFF,500 #000000,500 #FFFFFF,500',
-            ),
+            el('p', ['Format: ', el('code', ['#RRGGBB,duration_ms ...']), ' (space separated)']),
+            el('p', ['Example: ', el('code', ['#FFFFFF,500 #000000,500'])]),
+            el('p', ['Format with opacity: ', el('code', ['#RRGGBBAA,duration_ms ...'])]),
+            el('p', ['Example (50% opacity): ', el('code', ['#FFFFFF7F,500 #0000007F,500'])]),
         ]);
     }
 
