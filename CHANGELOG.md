@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## DPUS v1.5.1
+
 - Make it possible to use alpha in colors in the flasher script
 
 ## DPUS v1.5.0
