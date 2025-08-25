@@ -204,6 +204,13 @@ const webGlRenderer = {
         webGlRenderer._context = gl;
         webGlRenderer._program = program;
     },
+    render(): void {
+        const gl = webGlRenderer._context;
+        if (gl == null) {
+            // todo: maybe warn or error or sth?
+            return;
+        }
+    },
 };
 
 type BoardPanMode = 'none' | 'precise' | 'coarse';

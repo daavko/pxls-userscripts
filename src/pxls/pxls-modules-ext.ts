@@ -10,7 +10,7 @@ export interface PxlsExtendedBoardRenderLayer {
     title: string;
     init: (ctx: WebGL2RenderingContext) => void;
     render: (ctx: WebGL2RenderingContext, boardCtx: BoardRenderingContext) => void;
-    delete: (ctx: WebGL2RenderingContext) => void;
+    destroy: (ctx: WebGL2RenderingContext) => void;
 }
 
 export interface PxlsExtendedBoardModule {
