@@ -284,6 +284,7 @@ const save = async (): Promise<void> => {
     if (ctx == null) {
         throw new Error('Failed to create OffscreenCanvas context');
     }
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- safe
     ctx.putImageData(board.imageData!, 0, 0);
     const blob = await canvas.convertToBlob({ type: 'image/png' });
     const url = URL.createObjectURL(blob);

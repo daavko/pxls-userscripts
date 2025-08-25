@@ -1,3 +1,5 @@
+import type { BoardRenderingContext, PxlsExtendedBoardRenderLayer } from '../pxls/pxls-modules-ext';
+
 export function compileShader(
     gl: WebGL2RenderingContext,
     source: string,
@@ -98,4 +100,184 @@ export class CanvasResizeWatcher {
             }
         }
     };
+}
+
+export abstract class CanvasLayer implements PxlsExtendedBoardRenderLayer {
+    readonly name: string;
+    readonly title: string;
+
+    private readonly rect: DOMRect;
+    private readonly textureBufferData: Uint32Array;
+    // todo: instead of this, maybe use update regions that get triggered whenever the texture is changed in that region...
+    //  then we can update only those regions and save some memory bandwith
+    private textureChangedSinceLastRender = true;
+
+    private texCoordBuffer: WebGLBuffer | null = null;
+    // prettier-ignore
+    private readonly texCoordBufferData = new Float32Array([
+        0.0, 0.0,
+        1.0, 0.0,
+        0.0, 1.0,
+        0.0, 1.0,
+        1.0, 0.0,
+        1.0, 1.0,
+    ]);
+
+    private vertexBufferData: Float32Array;
+    private vertexBuffer: WebGLBuffer | null = null;
+
+    private program: WebGLProgram | null = null;
+
+    protected constructor(name: string, title: string, rect: DOMRect) {
+        this.name = name;
+        this.title = title;
+
+        // copy to avoid external mutations
+        this.rect = new DOMRect(rect.x, rect.y, rect.width, rect.height);
+        this.textureBufferData = new Uint32Array(rect.width * rect.height);
+        this.vertexBufferData = this.createVertexBufferData();
+    }
+
+    get x(): number {
+        return this.rect.x;
+    }
+
+    get y(): number {
+        return this.rect.y;
+    }
+
+    get width(): number {
+        return this.rect.width;
+    }
+
+    get height(): number {
+        return this.rect.height;
+    }
+
+    protected abstract get vertexShaderSource(): string;
+
+    protected abstract get fragmentShaderSource(): string;
+
+    set x(value: number) {
+        this.rect.x = value;
+        this.updateVertexBufferData();
+    }
+    set y(value: number) {
+        this.rect.y = value;
+        this.updateVertexBufferData();
+    }
+
+    init(ctx: WebGL2RenderingContext): void {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
+        const maxTextureSize = ctx.getParameter(ctx.MAX_TEXTURE_SIZE) as number;
+        if (this.rect.width > maxTextureSize || this.rect.height > maxTextureSize) {
+            throw new Error(
+                `Layer texture size ${this.rect.width}x${this.rect.height} exceeds maximum supported size of ${maxTextureSize}x${maxTextureSize}`,
+            );
+        }
+
+        const vertexShader = compileShader(ctx, this.vertexShaderSource, ctx.VERTEX_SHADER);
+        const fragmentShader = compileShader(ctx, this.fragmentShaderSource, ctx.FRAGMENT_SHADER);
+        this.program = createProgram(ctx, vertexShader, fragmentShader);
+
+        this.texCoordBuffer = ctx.createBuffer();
+        this.vertexBuffer = ctx.createBuffer();
+    }
+
+    render(ctx: WebGL2RenderingContext, boardCtx: BoardRenderingContext): void {
+        if (this.program == null) {
+            console.warn(`Render layer "${this.name}" not initialized, this should never happen`);
+            return;
+        }
+
+        ctx.useProgram(this.program);
+
+        // todo: bind vertex array
+        // todo: set uniforms
+        // todo: bind texture/s
+        this.bindVertexBuffer(ctx);
+        this.bindTexCoordBuffer(ctx);
+
+        // todo: draw call
+
+        this.unbindTexCoordBuffer(ctx);
+        this.unbindVertexBuffer(ctx);
+        ctx.useProgram(null);
+    }
+
+    destroy(ctx: WebGL2RenderingContext): void {
+        ctx.deleteProgram(this.program);
+        this.program = null;
+
+        ctx.deleteBuffer(this.vertexBuffer);
+        this.vertexBuffer = null;
+
+        ctx.deleteBuffer(this.texCoordBuffer);
+        this.texCoordBuffer = null;
+    }
+
+    setPixel(x: number, y: number, color: number): void {
+        this.textureBufferData[this.getIndex(x, y)] = color;
+        this.textureChangedSinceLastRender = true;
+    }
+
+    getPixel(x: number, y: number): number {
+        return this.textureBufferData[this.getIndex(x, y)];
+    }
+
+    private getIndex(x: number, y: number): number {
+        if (x < 0 || x >= this.rect.width || y < 0 || y >= this.rect.height) {
+            throw new Error(`Pixel coordinates out of bounds: (${x}, ${y})`);
+        }
+        return y * this.rect.width + x;
+    }
+
+    private createVertexBufferData(): Float32Array {
+        const x1 = this.rect.x;
+        const y1 = this.rect.y;
+        const x2 = this.rect.x + this.rect.width;
+        const y2 = this.rect.y + this.rect.height;
+
+        // prettier-ignore
+        return new Float32Array([
+            x1, y1,
+            x2, y1,
+            x1, y2,
+            x1, y2,
+            x2, y1,
+            x2, y2
+        ]);
+    }
+
+    private updateVertexBufferData(): void {
+        this.vertexBufferData = this.createVertexBufferData();
+    }
+
+    private bindVertexBuffer(ctx: WebGL2RenderingContext): void {
+        if (this.vertexBuffer == null) {
+            throw new Error('Vertex buffer not initialized');
+        }
+        ctx.bindBuffer(ctx.ARRAY_BUFFER, this.vertexBuffer);
+        ctx.bufferData(ctx.ARRAY_BUFFER, this.vertexBufferData, ctx.STATIC_DRAW);
+    }
+
+    private unbindVertexBuffer(ctx: WebGL2RenderingContext): void {
+        ctx.bindBuffer(ctx.ARRAY_BUFFER, null);
+    }
+
+    private bindTexCoordBuffer(ctx: WebGL2RenderingContext): void {
+        if (this.texCoordBuffer == null) {
+            throw new Error('TexCoord buffer not initialized');
+        }
+        ctx.bindBuffer(ctx.ARRAY_BUFFER, this.texCoordBuffer);
+        ctx.bufferData(ctx.ARRAY_BUFFER, this.texCoordBufferData, ctx.STATIC_DRAW);
+    }
+
+    private unbindTexCoordBuffer(ctx: WebGL2RenderingContext): void {
+        ctx.bindBuffer(ctx.ARRAY_BUFFER, null);
+    }
+
+    private bindTextureData(ctx: WebGL2RenderingContext): void {}
+
+    private unbindTextureData(ctx: WebGL2RenderingContext): void {}
 }

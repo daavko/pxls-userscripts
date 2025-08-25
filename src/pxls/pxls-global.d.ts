@@ -1,6 +1,5 @@
 import type {
     PxlsChatModule,
-    PxlsExtendedBoardModule,
     PxlsLookupModule,
     PxlsOverlaysModule,
     PxlsQueryModule,
@@ -115,13 +114,8 @@ export interface JQueryModalOptions {
     spinnerHtml: string;
 }
 
-export interface PxlsAppExtensions {
-    board?: PxlsExtendedBoardModule;
-}
-
 declare global {
     interface Window {
         App?: PxlsApp;
-        AppExtensions?: PxlsAppExtensions;
     }
 }

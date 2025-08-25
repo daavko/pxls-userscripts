@@ -29,6 +29,7 @@ export default defineConfig([
             ],
             '@eslint-community/eslint-comments/require-description': 'error',
 
+            '@typescript-eslint/adjacent-overload-signatures': 'off', // this rule doesn't work nicely with getter and setter pairs, and conflicts with 'member-ordering', see https://github.com/typescript-eslint/typescript-eslint/issues/4576
             '@typescript-eslint/default-param-last': 'warn',
             '@typescript-eslint/explicit-function-return-type': 'warn',
             '@typescript-eslint/explicit-member-accessibility': ['warn', { accessibility: 'no-public' }],
