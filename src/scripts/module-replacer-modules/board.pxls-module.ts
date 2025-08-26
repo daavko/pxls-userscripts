@@ -226,6 +226,11 @@ const webGlRenderer = {
 
         webGlRenderer._context = gl;
     },
+    startRenderLoop(): void {
+        requestAnimationFrame(() => {
+            webGlRenderer.render();
+        });
+    },
     render(): void {
         const gl = webGlRenderer._context;
         if (gl == null) {
@@ -253,6 +258,11 @@ const webGlRenderer = {
         for (const layer of layers) {
             layer.render(gl, boardCtx);
         }
+
+        // todo: uncomment when ready
+        // requestAnimationFrame(() => {
+        //     webGlRenderer.render();
+        // });
     },
     _collectRenderableLayers(): PxlsExtendedBoardRenderable[] {
         return webGlRenderer._layers
@@ -726,6 +736,8 @@ const init = (): void => {
     });
 
     // todo: initialize canvas
+    board.insertCanvasIntoDom();
+    webGlRenderer.init();
     initInteraction();
 };
 
@@ -745,6 +757,8 @@ const drawBoard = async (): Promise<void> => {
         board.setPixel(pixel.x, pixel.y, pixel.color, 'index');
     }
     pixelReplay.length = 0;
+
+    webGlRenderer.startRenderLoop();
 };
 
 const start = (): void => {
