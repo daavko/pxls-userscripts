@@ -3,9 +3,10 @@ export interface BoardRenderingContext {
     boardHeight: number;
     canvasWidth: number;
     canvasHeight: number;
+    uniformMatrix: Float32Array;
 }
 
-export interface PxlsExtendedBoardRenderLayer {
+export interface PxlsExtendedBoardRenderable {
     name: string;
     title: string;
     init: (ctx: WebGL2RenderingContext) => void;
@@ -14,5 +15,5 @@ export interface PxlsExtendedBoardRenderLayer {
 }
 
 export interface PxlsExtendedBoardModule {
-    registerRenderLayer: (layer: PxlsExtendedBoardRenderLayer) => void;
+    registerRenderLayer: (layer: PxlsExtendedBoardRenderable) => void;
 }

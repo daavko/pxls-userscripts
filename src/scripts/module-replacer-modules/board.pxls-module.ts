@@ -1,16 +1,27 @@
+import * as v from 'valibot';
 import { addStylesheet } from '../../modules/document';
 import type { PxlsAppTemplateConvertMode, PxlsBoardModule } from '../../pxls/pxls-modules';
+import type { BoardRenderingContext, PxlsExtendedBoardRenderable } from '../../pxls/pxls-modules-ext';
 import type { PxlsInfoResponse } from '../../pxls/pxls-types';
 import { eventTargetIsTextInput } from '../../util/event';
-import { CanvasResizeWatcher, compileShader, createProgram } from '../../util/webgl';
+import { getUniformMatrix } from '../../util/matrix3';
+import { CanvasResizeWatcher } from '../../util/webgl';
 import boardStyle from './board.css';
-import fragmentShaderSource from './board.frag';
-import vertexShaderSource from './board.vert';
 import type { ModuleExport, ModuleImportFunction } from './types';
 import { DEFAULT_BROKEN_SCRIPT } from './util';
 
 declare const requireFn: ModuleImportFunction;
 declare const moduleExport: ModuleExport<'board'>;
+
+export const savedRenderLayerSchema = v.object({
+    name: v.string(),
+    title: v.string(),
+    active: v.boolean(),
+});
+export type SavedBoardLayer = v.InferOutput<typeof savedRenderLayerSchema>;
+interface BoardLayer extends SavedBoardLayer {
+    renderable?: PxlsExtendedBoardRenderable;
+}
 
 interface BufferedPixel {
     x: number;
@@ -60,6 +71,12 @@ const board = {
     },
     get panY(): number {
         return board._panY;
+    },
+    get x(): number {
+        return board._panX - (board.width / 2) * board.scale;
+    },
+    get y(): number {
+        return board._panY - (board.height / 2) * board.scale;
     },
     get scale(): number {
         return board._scale;
@@ -176,14 +193,22 @@ const board = {
         board.canvas.classList.add('board', 'noselect', 'dpus__mr-board');
         container.appendChild(board.canvas);
     },
-    screenSpaceCoordsToBoardSpace(screenX: number, screenY: number): { x: number; y: number } {},
-    boardSpaceCoordsToScreenSpace(boardX: number, boardY: number): { x: number; y: number } {},
+    screenSpaceCoordsToBoardSpace(screenX: number, screenY: number): { x: number; y: number } {
+        const boardX = board.panX + (screenX - board.canvas.width / 2) * board.scale;
+        const boardY = board.panY + (screenY - board.canvas.height / 2) * board.scale;
+        return { x: boardX, y: boardY };
+    },
+    boardSpaceCoordsToScreenSpace(boardX: number, boardY: number): { x: number; y: number } {
+        const screenX = (boardX - board.panX) / board.scale + board.canvas.width / 2;
+        const screenY = (boardY - board.panY) / board.scale + board.canvas.height / 2;
+        return { x: screenX, y: screenY };
+    },
 };
 
 const webGlRenderer = {
     _context: null as WebGL2RenderingContext | null,
-    _program: null as WebGLProgram | null,
     _resizeWatcher: new CanvasResizeWatcher(board.canvas),
+    _layers: [] as BoardLayer[],
     init(): void {
         const canvas = board.canvas;
         const gl = canvas.getContext('webgl2', {
@@ -197,12 +222,8 @@ const webGlRenderer = {
         if (gl == null) {
             throw new Error('Failed to create WebGL context');
         }
-        const vertexShader = compileShader(gl, vertexShaderSource, gl.VERTEX_SHADER);
-        const fragmentShader = compileShader(gl, fragmentShaderSource, gl.FRAGMENT_SHADER);
-        const program = createProgram(gl, vertexShader, fragmentShader);
 
         webGlRenderer._context = gl;
-        webGlRenderer._program = program;
     },
     render(): void {
         const gl = webGlRenderer._context;
@@ -210,6 +231,33 @@ const webGlRenderer = {
             // todo: maybe warn or error or sth?
             return;
         }
+
+        const resizeWatcher = webGlRenderer._resizeWatcher;
+        resizeWatcher.setViewportSize(gl);
+
+        const { width, height } = resizeWatcher.getSize();
+        const uniformMatrix = new Float32Array(getUniformMatrix(width, height, board.x, board.y, board.scale));
+        const boardCtx = {
+            boardWidth: board.width,
+            boardHeight: board.height,
+            canvasWidth: width,
+            canvasHeight: height,
+            uniformMatrix,
+        } satisfies BoardRenderingContext;
+
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        const layers = webGlRenderer._collectRenderableLayers();
+        for (const layer of layers) {
+            layer.render(gl, boardCtx);
+        }
+    },
+    _collectRenderableLayers(): PxlsExtendedBoardRenderable[] {
+        return webGlRenderer._layers
+            .filter((layer) => layer.active)
+            .map((layer) => layer.renderable)
+            .filter((layer) => layer != null);
     },
 };
 

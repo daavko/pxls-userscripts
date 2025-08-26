@@ -1,4 +1,4 @@
-import type { BoardRenderingContext, PxlsExtendedBoardRenderLayer } from '../pxls/pxls-modules-ext';
+import type { BoardRenderingContext, PxlsExtendedBoardRenderable } from '../pxls/pxls-modules-ext';
 
 export function compileShader(
     gl: WebGL2RenderingContext,
@@ -87,6 +87,10 @@ export class CanvasResizeWatcher {
         gl.viewport(0, 0, this.lastKnownWidth, this.lastKnownHeight);
     }
 
+    getSize(): { width: number; height: number } {
+        return { width: this.lastKnownWidth, height: this.lastKnownHeight };
+    }
+
     private readonly onResize = (entries: ResizeObserverEntry[]): void => {
         for (const entry of entries) {
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- not true
@@ -102,7 +106,15 @@ export class CanvasResizeWatcher {
     };
 }
 
-export abstract class CanvasLayer implements PxlsExtendedBoardRenderLayer {
+interface PersistentCanvasLayerState {
+    program: WebGLProgram;
+    texCoordBuffer: WebGLBuffer;
+    vertexBuffer: WebGLBuffer;
+    vao: WebGLVertexArrayObject;
+    texture: WebGLTexture;
+}
+
+export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderable {
     readonly name: string;
     readonly title: string;
 
@@ -112,7 +124,6 @@ export abstract class CanvasLayer implements PxlsExtendedBoardRenderLayer {
     //  then we can update only those regions and save some memory bandwith
     private textureChangedSinceLastRender = true;
 
-    private texCoordBuffer: WebGLBuffer | null = null;
     // prettier-ignore
     private readonly texCoordBufferData = new Float32Array([
         0.0, 0.0,
@@ -122,11 +133,14 @@ export abstract class CanvasLayer implements PxlsExtendedBoardRenderLayer {
         1.0, 0.0,
         1.0, 1.0,
     ]);
-
     private vertexBufferData: Float32Array;
-    private vertexBuffer: WebGLBuffer | null = null;
 
-    private program: WebGLProgram | null = null;
+    // private texCoordBuffer: WebGLBuffer | null = null;
+    // private vertexBuffer: WebGLBuffer | null = null;
+    // private vao: WebGLVertexArrayObject | null = null;
+    // private program: WebGLProgram | null = null;
+
+    private persistentState: PersistentCanvasLayerState | null = null;
 
     protected constructor(name: string, title: string, rect: DOMRect) {
         this.name = name;
@@ -178,42 +192,54 @@ export abstract class CanvasLayer implements PxlsExtendedBoardRenderLayer {
 
         const vertexShader = compileShader(ctx, this.vertexShaderSource, ctx.VERTEX_SHADER);
         const fragmentShader = compileShader(ctx, this.fragmentShaderSource, ctx.FRAGMENT_SHADER);
-        this.program = createProgram(ctx, vertexShader, fragmentShader);
+        const program = createProgram(ctx, vertexShader, fragmentShader);
 
-        this.texCoordBuffer = ctx.createBuffer();
-        this.vertexBuffer = ctx.createBuffer();
+        this.persistentState = {
+            program,
+            texCoordBuffer: ctx.createBuffer(),
+            vertexBuffer: ctx.createBuffer(),
+            vao: ctx.createVertexArray(),
+            texture: ctx.createTexture(),
+        };
     }
 
     render(ctx: WebGL2RenderingContext, boardCtx: BoardRenderingContext): void {
-        if (this.program == null) {
+        if (this.persistentState == null) {
             console.warn(`Render layer "${this.name}" not initialized, this should never happen`);
             return;
         }
 
-        ctx.useProgram(this.program);
+        const { program, vertexBuffer, vao } = this.persistentState;
 
-        // todo: bind vertex array
+        ctx.bindVertexArray(vao);
+
         // todo: set uniforms
-        // todo: bind texture/s
-        this.bindVertexBuffer(ctx);
-        this.bindTexCoordBuffer(ctx);
+        this.bindVertexBuffer(ctx, this.persistentState, 'a_position');
+        this.bindTexCoordBuffer(ctx, this.persistentState, 'a_texCoord');
+        this.bindTextureData(ctx, this.persistentState);
 
         // todo: draw call
+        ctx.useProgram(program);
+        ctx.bindVertexArray(vao);
+        this.fillVertexBuffer(ctx, vertexBuffer);
+        ctx.drawArrays(ctx.TRIANGLES, 0, 6);
 
-        this.unbindTexCoordBuffer(ctx);
-        this.unbindVertexBuffer(ctx);
+        ctx.bindVertexArray(null);
+        ctx.deleteVertexArray(vao);
+        ctx.bindBuffer(ctx.ARRAY_BUFFER, null);
+        this.unbindTextureData(ctx);
         ctx.useProgram(null);
     }
 
     destroy(ctx: WebGL2RenderingContext): void {
-        ctx.deleteProgram(this.program);
-        this.program = null;
-
-        ctx.deleteBuffer(this.vertexBuffer);
-        this.vertexBuffer = null;
-
-        ctx.deleteBuffer(this.texCoordBuffer);
-        this.texCoordBuffer = null;
+        if (this.persistentState == null) {
+            return;
+        }
+        ctx.deleteProgram(this.persistentState.program);
+        ctx.deleteBuffer(this.persistentState.vertexBuffer);
+        ctx.deleteBuffer(this.persistentState.texCoordBuffer);
+        ctx.deleteVertexArray(this.persistentState.vao);
+        this.persistentState = null;
     }
 
     setPixel(x: number, y: number, color: number): void {
@@ -253,31 +279,64 @@ export abstract class CanvasLayer implements PxlsExtendedBoardRenderLayer {
         this.vertexBufferData = this.createVertexBufferData();
     }
 
-    private bindVertexBuffer(ctx: WebGL2RenderingContext): void {
-        if (this.vertexBuffer == null) {
-            throw new Error('Vertex buffer not initialized');
-        }
-        ctx.bindBuffer(ctx.ARRAY_BUFFER, this.vertexBuffer);
-        ctx.bufferData(ctx.ARRAY_BUFFER, this.vertexBufferData, ctx.STATIC_DRAW);
+    private bindVertexBuffer(
+        ctx: WebGL2RenderingContext,
+        state: PersistentCanvasLayerState,
+        attributeName: string,
+    ): void {
+        const location = ctx.getAttribLocation(state.program, attributeName);
+        ctx.enableVertexAttribArray(location);
+        ctx.bindBuffer(ctx.ARRAY_BUFFER, state.vertexBuffer);
+        ctx.vertexAttribPointer(0, 2, ctx.FLOAT, false, 0, 0);
     }
 
-    private unbindVertexBuffer(ctx: WebGL2RenderingContext): void {
-        ctx.bindBuffer(ctx.ARRAY_BUFFER, null);
+    private fillVertexBuffer(ctx: WebGL2RenderingContext, buffer: WebGLBuffer): void {
+        ctx.bindBuffer(ctx.ARRAY_BUFFER, buffer);
+        ctx.bufferData(ctx.ARRAY_BUFFER, this.vertexBufferData, ctx.DYNAMIC_DRAW);
     }
 
-    private bindTexCoordBuffer(ctx: WebGL2RenderingContext): void {
-        if (this.texCoordBuffer == null) {
-            throw new Error('TexCoord buffer not initialized');
-        }
-        ctx.bindBuffer(ctx.ARRAY_BUFFER, this.texCoordBuffer);
+    private bindTexCoordBuffer(
+        ctx: WebGL2RenderingContext,
+        state: PersistentCanvasLayerState,
+        attributeName: string,
+    ): void {
+        const location = ctx.getAttribLocation(state.program, attributeName);
+        ctx.enableVertexAttribArray(location);
+        ctx.bindBuffer(ctx.ARRAY_BUFFER, state.texCoordBuffer);
         ctx.bufferData(ctx.ARRAY_BUFFER, this.texCoordBufferData, ctx.STATIC_DRAW);
+        ctx.vertexAttribPointer(0, 2, ctx.FLOAT, false, 0, 0);
     }
 
-    private unbindTexCoordBuffer(ctx: WebGL2RenderingContext): void {
-        ctx.bindBuffer(ctx.ARRAY_BUFFER, null);
+    private bindTextureData(ctx: WebGL2RenderingContext, state: PersistentCanvasLayerState): void {
+        ctx.activeTexture(ctx.TEXTURE0);
+        ctx.bindTexture(ctx.TEXTURE_2D, state.texture);
+        ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_WRAP_S, ctx.CLAMP_TO_EDGE);
+        ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_WRAP_T, ctx.CLAMP_TO_EDGE);
+        ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_MIN_FILTER, ctx.LINEAR);
+        ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_MAG_FILTER, ctx.NEAREST);
     }
 
-    private bindTextureData(ctx: WebGL2RenderingContext): void {}
+    private fillFullTexture(ctx: WebGL2RenderingContext, texture: WebGLTexture): void {
+        if (!this.textureChangedSinceLastRender) {
+            return;
+        }
+        ctx.bindTexture(ctx.TEXTURE_2D, texture);
+        ctx.texImage2D(
+            ctx.TEXTURE_2D,
+            0,
+            ctx.RGBA,
+            this.rect.width,
+            this.rect.height,
+            0,
+            ctx.RGBA,
+            ctx.UNSIGNED_BYTE,
+            this.textureBufferData,
+        );
+        this.textureChangedSinceLastRender = false;
+    }
 
-    private unbindTextureData(ctx: WebGL2RenderingContext): void {}
+    private unbindTextureData(ctx: WebGL2RenderingContext): void {
+        ctx.activeTexture(ctx.TEXTURE0);
+        ctx.bindTexture(ctx.TEXTURE_2D, null);
+    }
 }
