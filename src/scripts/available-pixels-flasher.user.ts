@@ -2,7 +2,6 @@ import type { InferOutput } from 'valibot';
 import * as v from 'valibot';
 import { addStylesheet } from '../modules/document';
 import { el } from '../modules/html';
-import { Messenger } from '../modules/message';
 import { getPxlsUIPlaceableCount } from '../modules/pxls-ui';
 import { BooleanSetting, SettingBase, Settings, type SettingUpdateCallback } from '../modules/settings';
 import { createBooleanSetting, createLineBreak, createSettingsUI, createStringSetting } from '../modules/settings-ui';
@@ -41,8 +40,6 @@ class FlashKeyframesSetting extends SettingBase<FlashKeyframes, string> {
 }
 
 export class AvailablePixelsFlasherScript extends PxlsUserscript {
-    private readonly messenger = new Messenger('Available pixels flasher');
-
     private readonly settings = Settings.create('flashOnAvailablePixels', {
         flashEnabled: new BooleanSetting(true),
         flashKeyframes: new FlashKeyframesSetting([
@@ -110,10 +107,6 @@ export class AvailablePixelsFlasherScript extends PxlsUserscript {
     private processStackCountChanges(): void {
         const stackCountElement = getPxlsUIPlaceableCount();
         const stackCountText = stackCountElement.textContent;
-
-        if (stackCountText == null) {
-            return;
-        }
 
         const pixelCount = stackCountText.split('/').at(0);
         if (pixelCount == null) {

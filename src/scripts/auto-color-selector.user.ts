@@ -18,10 +18,10 @@ import {
     createSubheading,
 } from '../modules/settings-ui';
 import { detemplatizeImage, getTemplateImage } from '../modules/template';
-import { eventTargetIsTextInput } from '../util/event';
-import { pointsDistance } from '../util/geometry';
 import { instanceUsesAllowlists, isUserInList } from '../modules/userlist';
 import type { PxlsApp } from '../pxls/pxls-global';
+import { eventTargetIsTextInput } from '../util/event';
+import { pointsDistance } from '../util/geometry';
 import { PxlsUserscript } from './userscript';
 
 const COORDS_REGEX = /^\(([0-9]+), ([0-9]+)\)$/;
@@ -237,8 +237,8 @@ export class AutoColorSelectorScript extends PxlsUserscript {
             return;
         }
 
-        const coordsText = getPxlsUIMouseCoords().textContent?.trim();
-        if (coordsText == null || coordsText === '') {
+        const coordsText = getPxlsUIMouseCoords().textContent.trim();
+        if (coordsText === '') {
             // empty is fine
             return;
         }
