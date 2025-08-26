@@ -19,6 +19,7 @@ import {
 } from '../modules/settings-ui';
 import { detemplatizeImage, getTemplateImage } from '../modules/template';
 import { eventTargetIsTextInput } from '../util/event';
+import { pointsDistance } from '../util/geometry';
 import { instanceUsesAllowlists, isUserInList } from '../modules/userlist';
 import type { PxlsApp } from '../pxls/pxls-global';
 import { PxlsUserscript } from './userscript';
@@ -186,9 +187,7 @@ export class AutoColorSelectorScript extends PxlsUserscript {
                 }
 
                 const coords = { x: clientX, y: clientY };
-                const distance = Math.sqrt(
-                    (coords.x - this.pointerDownCoords.x) ** 2 + (coords.y - this.pointerDownCoords.y) ** 2,
-                );
+                const distance = pointsDistance(coords.x, coords.y, this.pointerDownCoords.x, this.pointerDownCoords.y);
                 if (distance > 5) {
                     debug(`Pointer move fuse triggered at ${coords.x},${coords.y} distance ${distance}`);
                     this.pointerMoveFuse = true;

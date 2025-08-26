@@ -4,6 +4,7 @@ import type { PxlsAppTemplateConvertMode, PxlsBoardModule } from '../../pxls/pxl
 import type { BoardRenderingContext, PxlsExtendedBoardRenderable } from '../../pxls/pxls-modules-ext';
 import type { PxlsInfoResponse } from '../../pxls/pxls-types';
 import { eventTargetIsTextInput } from '../../util/event';
+import { pointsDistance } from '../../util/geometry';
 import { getUniformMatrix } from '../../util/matrix3';
 import { CanvasResizeWatcher } from '../../util/webgl';
 import boardStyle from './board.css';
@@ -261,21 +262,55 @@ const webGlRenderer = {
     },
 };
 
-type BoardPanMode = 'none' | 'precise' | 'coarse';
+interface Point {
+    x: number;
+    y: number;
+}
+
+interface PointerCoordinates {
+    board: Point;
+    screen: Point;
+}
+
+interface PointerData {
+    pointerId: number;
+    down: PointerCoordinates;
+    /**
+     * current position in screen coordinates
+     */
+    current: Point;
+}
+
+interface DisabledPanMode {
+    mode: 'none';
+}
+
+interface SinglePointerPanMode {
+    mode: 'single';
+    data: PointerData;
+}
+
+interface TwoPointerPanModePointer {
+    mode: 'double';
+    first: PointerData;
+    second?: PointerData;
+}
+
+type PanMode = DisabledPanMode | SinglePointerPanMode | TwoPointerPanModePointer;
 
 const boardPanner = {
-    _MIN_PAN_DISTANCE: 5, // minimum distance the "pan point" must move before we can consider this a panning action
-    _pointerDownCoordinates: new Map<number, { x: number; y: number }>(),
-    _panMode: 'none' as BoardPanMode,
+    // minimum distance the "pan point" must move before we can consider this a panning action, in screen coordinates
+    _MIN_PAN_DISTANCE: 5,
+    _panMode: { mode: 'none' } as PanMode,
     _minPanDistanceFuseBroken: false,
     pointerDown(e: PointerEvent): void {
-        if (boardPanner._panMode === 'precise') {
+        if (boardPanner._panMode.mode === 'single') {
             return;
         }
 
         if (
-            boardPanner._panMode === 'coarse' &&
-            (e.pointerType !== 'touch' || boardPanner._pointerDownCoordinates.size >= 2)
+            boardPanner._panMode.mode === 'double' &&
+            (e.pointerType !== 'touch' || boardPanner._panMode.second != null || boardPanner._minPanDistanceFuseBroken)
         ) {
             return;
         }
@@ -284,15 +319,44 @@ const boardPanner = {
         const screenX = e.offsetX;
         const screenY = e.offsetY;
         const { x, y } = board.screenSpaceCoordsToBoardSpace(screenX, screenY);
-        boardPanner._addPointer(e, x, y);
-        // todo: begin panning or whatever
+        boardPanner._addPointer(e, x, y, screenX, screenY);
     },
     pointerMove(e: PointerEvent): void {
-        if (!boardPanner._pointerDownCoordinates.has(e.pointerId)) {
+        if (boardPanner._panMode.mode === 'none' || !boardPanner._hasPointerId(e.pointerId)) {
             return;
         }
 
+        const screen: Point = { x: e.offsetX, y: e.offsetY };
+
+        switch (boardPanner._panMode.mode) {
+            case 'single': {
+                const { x, y } = boardPanner._panMode.data.current;
+                const delta: Point = { x: screen.x - x, y: screen.y - y };
+                boardPanner._panMode.data.current = screen;
+                boardPanner._singlePointerPan(boardPanner._panMode.data, delta);
+                break;
+            }
+            case 'double': {
+                let firstDelta: Point = { x: 0, y: 0 };
+                if (boardPanner._panMode.first.pointerId === e.pointerId) {
+                    const { x, y } = boardPanner._panMode.first.current;
+                    firstDelta = { x: screen.x - x, y: screen.y - y };
+                    boardPanner._panMode.first.current = screen;
+                } else if (boardPanner._panMode.second?.pointerId === e.pointerId) {
+                    boardPanner._panMode.second.current = screen;
+                }
+
+                if (boardPanner._panMode.second != null) {
+                    boardPanner._twoPointerPan(boardPanner._panMode.first, boardPanner._panMode.second);
+                } else {
+                    boardPanner._singlePointerPan(boardPanner._panMode.first, firstDelta);
+                }
+                break;
+            }
+        }
+
         // todo: pan/zoom according to active pointers
+        // todo: if pan distance above min_pan_distance, set _minPanDistanceFuseBroken to true
     },
     pointerUp(e: PointerEvent): void {
         boardPanner._removePointerId(e.pointerId);
@@ -300,30 +364,107 @@ const boardPanner = {
     pointerCancel(e: PointerEvent): void {
         boardPanner._removePointerId(e.pointerId);
     },
-    get minPanDistanceFuseBroken(): number {
-        // todo: calculate current pan distance from origin point
-    },
     get _anyPointerActive(): boolean {
-        return boardPanner._pointerDownCoordinates.size > 0;
+        return boardPanner._panMode.mode !== 'none';
     },
-    _addPointer(event: PointerEvent, x: number, y: number): void {
-        boardPanner._pointerDownCoordinates.set(event.pointerId, { x, y });
-
-        if (boardPanner._panMode === 'none') {
+    _addPointer(event: PointerEvent, boardX: number, boardY: number, screenX: number, screenY: number): void {
+        if (boardPanner._panMode.mode === 'none') {
             if (event.pointerType === 'touch') {
-                boardPanner._panMode = 'coarse';
+                boardPanner._panMode = {
+                    mode: 'double',
+                    first: {
+                        pointerId: event.pointerId,
+                        down: { board: { x: boardX, y: boardY }, screen: { x: screenX, y: screenY } },
+                        current: { x: screenX, y: screenY },
+                    },
+                };
             } else {
-                boardPanner._panMode = 'precise';
+                boardPanner._panMode = {
+                    mode: 'single',
+                    data: {
+                        pointerId: event.pointerId,
+                        down: { board: { x: boardX, y: boardY }, screen: { x: screenX, y: screenY } },
+                        current: { x: screenX, y: screenY },
+                    },
+                };
             }
+        } else if (
+            boardPanner._panMode.mode === 'double' &&
+            event.pointerType === 'touch' &&
+            boardPanner._panMode.second == null
+        ) {
+            boardPanner._panMode.second = {
+                pointerId: event.pointerId,
+                down: { board: { x: boardX, y: boardY }, screen: { x: screenX, y: screenY } },
+                current: { x: screenX, y: screenY },
+            };
+
+            const firstCurrentCoords = boardPanner._panMode.first.current;
+            const firstCurrentBoardCoords = board.screenSpaceCoordsToBoardSpace(
+                firstCurrentCoords.x,
+                firstCurrentCoords.y,
+            );
+            boardPanner._panMode.first.down = {
+                board: firstCurrentBoardCoords,
+                screen: { ...firstCurrentCoords },
+            };
+            boardPanner._minPanDistanceFuseBroken = true;
+        }
+    },
+    _hasPointerId(pointerId: number): boolean {
+        switch (boardPanner._panMode.mode) {
+            case 'none':
+                return false;
+            case 'single':
+                return boardPanner._panMode.data.pointerId === pointerId;
+            case 'double':
+                return (
+                    boardPanner._panMode.first.pointerId === pointerId ||
+                    boardPanner._panMode.second?.pointerId === pointerId
+                );
         }
     },
     _removePointerId(pointerId: number): void {
-        boardPanner._pointerDownCoordinates.delete(pointerId);
-        if (boardPanner._pointerDownCoordinates.size === 0) {
-            // no pointers left, reset pan state
-            boardPanner._panMode = 'none';
+        if (boardPanner._panMode.mode === 'single' && boardPanner._panMode.data.pointerId === pointerId) {
+            boardPanner._panMode = { mode: 'none' };
             boardPanner._minPanDistanceFuseBroken = false;
+        } else if (boardPanner._panMode.mode === 'double') {
+            if (boardPanner._panMode.first.pointerId === pointerId) {
+                if (boardPanner._panMode.second == null) {
+                    boardPanner._panMode = { mode: 'none' };
+                    boardPanner._minPanDistanceFuseBroken = false;
+                } else {
+                    boardPanner._panMode.first = boardPanner._panMode.second;
+                    boardPanner._panMode.second = undefined;
+                }
+            } else if (boardPanner._panMode.second?.pointerId === pointerId) {
+                boardPanner._panMode.second = undefined;
+            }
         }
+    },
+    _singlePointerPan(pointer: PointerData, delta: Point): void {
+        if (boardPanner._minPanDistanceFuseBroken) {
+            board.setPan({
+                x: board.panX - delta.x * board.scale,
+                y: board.panY - delta.y * board.scale,
+            });
+        } else {
+            const distance = pointsDistance(
+                pointer.down.screen.x,
+                pointer.down.screen.y,
+                pointer.current.x,
+                pointer.current.y,
+            );
+            if (distance >= boardPanner._MIN_PAN_DISTANCE) {
+                boardPanner._minPanDistanceFuseBroken = true;
+            }
+        }
+    },
+    _twoPointerPan(firstPointer: PointerData, secondPointer: PointerData): void {
+        // todo
+        // we need to calculate the desired pan and scale based on the current positions of the two pointers
+        // we know the original board coordinates and screen coordinates of both pointers when they were pressed down,
+        // and we simply need to recalculate the panX, panY and scale that would result in the same board positions with the new screen coordinates
     },
 };
 
@@ -652,12 +793,12 @@ const start = (): void => {
                 place.switch(parseInt(colorIndex as string));
             }
 
-            drawBoard().catch((e) => {
+            drawBoard().catch((e: unknown) => {
                 console.error('Error drawing board:', e);
                 socket.reconnect();
             });
         })
-        .catch((e) => {
+        .catch((e: unknown) => {
             console.error('Error fetching /info:', e);
             socket.reconnect();
         });
@@ -665,11 +806,14 @@ const start = (): void => {
 
 const update = (optional?: boolean, ignoreCanvasLock = false): boolean => {
     if (loaded) {
-        query.set({
-            x: board.panX.toString(),
-            y: board.panY.toString(),
-            scale: board.scale.toString(),
-        });
+        query.set(
+            {
+                x: Math.round(board.panX).toString(),
+                y: Math.round(board.panY).toString(),
+                scale: (Math.round(board.scale * 100) / 100).toString(),
+            },
+            true,
+        );
     }
 
     if (optional === true) {
@@ -740,8 +884,12 @@ const boardExport: PxlsBoardModule = {
         }
     },
     fromScreen: (screenX, screenY, floored = true): { x: number; y: number } => {
-        // todo: implement floored?
-        return board.screenSpaceCoordsToBoardSpace(screenX, screenY);
+        let { x, y } = board.screenSpaceCoordsToBoardSpace(screenX, screenY);
+        if (floored) {
+            x = Math.floor(x);
+            y = Math.floor(y);
+        }
+        return { x, y };
     },
     toScreen: (boardX, boardY): { x: number; y: number } => {
         return board.boardSpaceCoordsToScreenSpace(boardX, boardY);
