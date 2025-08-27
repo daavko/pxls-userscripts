@@ -1,6 +1,7 @@
 import type {
     PxlsAppTemplateConvertMode,
     PxlsAppTemplateObject,
+    PxlsAppTemplateUrlObject,
     PxlsBoardModule,
     PxlsQueryModule,
     PxlsTemplateModule,
@@ -10,6 +11,7 @@ import type { PxlsExtendedBoardModule } from '../../pxls/pxls-modules-ext';
 import type { PxlsInfoResponse } from '../../pxls/pxls-types';
 import { eventTargetIsTextInput } from '../../util/event';
 import type { Point } from '../../util/geometry';
+import type { NullishKeys } from '../../util/types';
 import type { ModuleExport, ModuleImportFunction } from './types';
 import { DEFAULT_BROKEN_SCRIPT } from './util';
 
@@ -28,6 +30,11 @@ interface LoadedTemplate {
     displayWidth: number;
     displayHeight: number;
     styleImage: ImageData | null;
+}
+
+interface QueuedOptionUpdate {
+    options: NullishKeys<PxlsAppTemplateObject>;
+    timer: number;
 }
 
 const builtinStyles = new Map<string, string>();
@@ -61,6 +68,7 @@ const template = {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- assumed to exist
         opacityPercentage: document.querySelector<HTMLElement>('#template-opacity-percentage')!,
     },
+    queuedOptionUpdate: null as QueuedOptionUpdate | null,
     options: {
         enabled: false,
         url: '',
@@ -264,7 +272,24 @@ const template = {
         ctx.drawImage(img, 0, 0);
         return ctx.getImageData(0, 0, img.width, img.height);
     },
-    _update: (options: Partial<PxlsAppTemplateObject>, updateSettings = true): void => {
+    _queueUpdate: (options: NullishKeys<PxlsAppTemplateObject>): void => {
+        if (template.queuedOptionUpdate) {
+            clearTimeout(template.queuedOptionUpdate.timer);
+            template.queuedOptionUpdate.options = { ...template.queuedOptionUpdate.options, ...options };
+        } else {
+            template.queuedOptionUpdate = {
+                options: { ...options },
+                timer: 0,
+            };
+        }
+        template.queuedOptionUpdate.timer = window.setTimeout(() => {
+            if (template.queuedOptionUpdate) {
+                template._update(template.queuedOptionUpdate.options);
+                template.queuedOptionUpdate = null;
+            }
+        }, 200);
+    },
+    _update: (options: NullishKeys<PxlsAppTemplateObject>, updateSettings = true): void => {
         if (Object.keys(options).length === 0) {
             return;
         }
@@ -431,23 +456,54 @@ const templateDragger = {
     },
 };
 
+function normalizeTemplateObj(obj: PxlsAppTemplateUrlObject, dir: true): PxlsAppTemplateObject;
+function normalizeTemplateObj(obj: PxlsAppTemplateObject, dir?: false): PxlsAppTemplateUrlObject;
+function normalizeTemplateObj(
+    obj: PxlsAppTemplateObject | PxlsAppTemplateUrlObject,
+    dir?: boolean,
+): PxlsAppTemplateObject | PxlsAppTemplateUrlObject {
+    if (dir === true) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-shadow -- safe
+        const { template, ox, oy, tw, title, convert } = obj as PxlsAppTemplateUrlObject;
+        return {
+            url: template,
+            x: ox,
+            y: oy,
+            width: tw,
+            title: title,
+            convertMode: convert,
+        } satisfies PxlsAppTemplateObject;
+    } else {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
+        const { url, x, y, width, title, convertMode } = obj as PxlsAppTemplateObject;
+        return {
+            template: url,
+            ox: x,
+            oy: y,
+            tw: width,
+            title: title,
+            convert: convertMode,
+        } satisfies PxlsAppTemplateUrlObject;
+    }
+}
+
 const templateExport: PxlsTemplateModule = {
-    normalizeTemplateObj: (obj, dir) => {
-        if (dir === true) {
-        } else {
-        }
-    },
+    normalizeTemplateObj,
     update: (options: Partial<PxlsAppTemplateObject>, updateSettings?: boolean) => {
         template._update(options, updateSettings);
     },
     draw: () => {
         /* intentionally empty, WebGL renderer doesn't manually draw the template */
     },
-    init: () => {},
+    init: () => {
+        template.init();
+    },
     webinit: (data: PxlsInfoResponse) => {
         template.webinit(data);
     },
-    queueUpdate: () => {},
+    queueUpdate: (templateObj: NullishKeys<PxlsAppTemplateObject>) => {
+        template._queueUpdate(templateObj);
+    },
     getOptions: () => {
         return {
             use: template.options.enabled,
@@ -465,7 +521,7 @@ const templateExport: PxlsTemplateModule = {
     },
     getDisplayWidth: () => 0,
     getDisplayHeight: () => 0,
-    getWidth: () => 0,
+    getWidthRatio: () => 0,
 };
 
 moduleExport.exports.template = templateExport;

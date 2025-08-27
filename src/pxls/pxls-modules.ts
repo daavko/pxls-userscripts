@@ -532,7 +532,6 @@ export interface PxlsAppTemplateObject {
     url: string;
     title: string;
     convertMode: PxlsAppTemplateConvertMode;
-    // todo: add possible values
     style?: string;
 }
 
