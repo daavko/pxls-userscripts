@@ -60,8 +60,11 @@ let query: PxlsQueryModule | undefined;
 const { ls } = requireFn('./storage');
 const { grid } = requireFn('./grid');
 
+const MOUSE_HOLD_DURATION = 500;
+
 let loaded = false;
 let allowDrag = true;
+let mouseHoldTimer: number | null = null;
 
 const board = {
     _canvas: document.createElement('canvas'),
@@ -201,6 +204,8 @@ const board = {
         board.setRgbaPixelByIndex(pixelIndex, color);
     },
     getRgbaPixel(x: number, y: number): number | undefined {
+        x = Math.floor(x);
+        y = Math.floor(y);
         return board._renderable?.getPixel(x, y);
     },
     getPalettePixel(x: number, y: number): number | undefined {
@@ -231,11 +236,15 @@ const board = {
         const boardY = (screenY - board.y) / board.scale;
         return { x: boardX, y: boardY };
     },
-    screenSpaceCoordsToBoardSpace(screenX: number, screenY: number): { x: number; y: number } {
+    screenSpaceCoordsToBoardSpace(screenX: number, screenY: number, floored = false): { x: number; y: number } {
         const { x: boardX, y: boardY } = board.screenSpaceCoordsToBoardSpaceUnclamped(screenX, screenY);
         const clampedX = Math.max(0, Math.min(boardX, board.width - 1));
         const clampedY = Math.max(0, Math.min(boardY, board.height - 1));
-        return { x: clampedX, y: clampedY };
+        if (floored) {
+            return { x: Math.floor(clampedX), y: Math.floor(clampedY) };
+        } else {
+            return { x: clampedX, y: clampedY };
+        }
     },
     boardSpaceCoordsToScreenSpace(boardX: number, boardY: number): { x: number; y: number } {
         const screenX = (boardX - board.panX) / board.scale + board.canvas.width / 2;
@@ -302,7 +311,7 @@ const webGlRenderer = {
     render(): void {
         const gl = webGlRenderer._context;
         if (gl == null) {
-            // todo: maybe warn or error or sth?
+            console.error('WebGL context not initialized');
             return;
         }
 
@@ -327,7 +336,6 @@ const webGlRenderer = {
             layer.render(gl, boardCtx);
         }
 
-        // todo: uncomment when ready
         requestAnimationFrame(() => {
             webGlRenderer.render();
         });
@@ -427,9 +435,6 @@ const boardPanner = {
                 break;
             }
         }
-
-        // todo: pan/zoom according to active pointers
-        // todo: if pan distance above min_pan_distance, set _minPanDistanceFuseBroken to true
     },
     pointerUp(e: PointerEvent): void {
         boardPanner._removePointerId(e.pointerId);
@@ -437,7 +442,10 @@ const boardPanner = {
     pointerCancel(e: PointerEvent): void {
         boardPanner._removePointerId(e.pointerId);
     },
-    get _anyPointerActive(): boolean {
+    get minPanDistanceFuseBroken(): boolean {
+        return boardPanner._minPanDistanceFuseBroken;
+    },
+    get anyPointerActive(): boolean {
         return boardPanner._panMode.mode !== 'none';
     },
     _addPointer(event: PointerEvent, boardX: number, boardY: number, screenX: number, screenY: number): void {
@@ -686,18 +694,25 @@ const initInteraction = (): void => {
                 return;
             }
 
-            switch (e.button) {
-                case 0: // left button
-                    if (allowDrag) {
-                        boardPanner.pointerDown(e);
+            const { offsetX, offsetY } = e;
+            if (!board.screenSpaceCoordIsOnBoard(offsetX, offsetY)) {
+                return;
+            }
+
+            if (e.button === 0) {
+                if (allowDrag) {
+                    boardPanner.pointerDown(e);
+                }
+
+                if (mouseHoldTimer != null) {
+                    clearTimeout(mouseHoldTimer);
+                }
+                mouseHoldTimer = setTimeout(() => {
+                    mouseHoldTimer = null;
+                    if (boardPanner.anyPointerActive && !boardPanner.minPanDistanceFuseBroken) {
+                        lookup.runLookup(offsetX, offsetY);
                     }
-                    break;
-                case 1: // middle button
-                    // todo: nothing?
-                    break;
-                case 2: // right button
-                    // todo: right mouse button action
-                    break;
+                }, MOUSE_HOLD_DURATION);
             }
         },
         { passive: true },
@@ -723,27 +738,39 @@ const initInteraction = (): void => {
         switch (e.button) {
             case 0: // left button
                 if (e.isPrimary) {
-                    // todo: if we didn't pan, place a pixel
-                    // todo: if we held down long, do a lookup
-                    // todo: if we did neither, just pointerUp
+                    if (mouseHoldTimer != null) {
+                        clearTimeout(mouseHoldTimer);
+                        mouseHoldTimer = null;
+
+                        // we can do our thing, no long press happened
+                        if (!boardPanner.minPanDistanceFuseBroken) {
+                            const { x, y } = board.screenSpaceCoordsToBoardSpace(e.offsetX, e.offsetY, true);
+                            place.place(x, y);
+                        }
+                    }
                     boardPanner.pointerUp(e);
                 } else {
                     boardPanner.pointerUp(e);
                 }
                 break;
-            case 2: // right button
+            case 2: {
+                // right button
+                const { offsetX, offsetY } = e;
+                if (!board.screenSpaceCoordIsOnBoard(offsetX, offsetY)) {
+                    return;
+                }
+
                 e.preventDefault();
                 switch (settings.place.rightclick.action.get()) {
                     case 'clear':
                         place.switch(-1);
                         break;
                     case 'copy': {
-                        // todo: needs fixing, selects wrong index
-                        // const { x, y } = board.screenSpaceCoordsToBoardSpace(e.offsetX, e.offsetY);
-                        // const color = board.getPalettePixel(x, y);
-                        // if (color != null && color >= 0) {
-                        //     place.switch(color);
-                        // }
+                        const { x, y } = board.screenSpaceCoordsToBoardSpace(offsetX, offsetY);
+                        const paletteIndex = board.getPalettePixel(x, y);
+                        if (paletteIndex != null && paletteIndex >= 0) {
+                            place.switch(paletteIndex);
+                        }
                         break;
                     }
                     case 'lookup':
@@ -755,6 +782,7 @@ const initInteraction = (): void => {
                         break;
                 }
                 break;
+            }
         }
     });
 
@@ -901,7 +929,7 @@ const start = (): void => {
         });
 };
 
-const update = (optional?: boolean, ignoreCanvasLock = false): boolean => {
+const update = (optional?: boolean): boolean => {
     if (loaded) {
         query?.set(
             {
@@ -916,8 +944,6 @@ const update = (optional?: boolean, ignoreCanvasLock = false): boolean => {
     if (optional === true) {
         return false;
     }
-
-    // todo: set stuff to be pixelated if scale is above 1 (this is actually done in the fragment shader now so just remember to do it)
 
     place.update();
     grid.update();
@@ -979,12 +1005,7 @@ const boardExport: PxlsBoardModule = {
         }
     },
     fromScreen: (screenX, screenY, floored = true): { x: number; y: number } => {
-        let { x, y } = board.screenSpaceCoordsToBoardSpace(screenX, screenY);
-        if (floored) {
-            x = Math.floor(x);
-            y = Math.floor(y);
-        }
-        return { x, y };
+        return board.screenSpaceCoordsToBoardSpace(screenX, screenY, floored);
     },
     toScreen: (boardX, boardY): { x: number; y: number } => {
         return board.boardSpaceCoordsToScreenSpace(boardX, boardY);
