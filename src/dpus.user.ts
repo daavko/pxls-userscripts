@@ -2,7 +2,6 @@ import { debug } from './modules/debug';
 import { Messenger } from './modules/message';
 import { waitForApp } from './modules/pxls-init';
 import { initTemplateEventHandlers } from './modules/pxls-template';
-import { findUIElements } from './modules/pxls-ui';
 import { BooleanSetting, GLOBAL_SETTINGS, Settings } from './modules/settings';
 import {
     createBooleanSetting,
@@ -125,7 +124,6 @@ async function init(): Promise<void> {
         return;
     }
 
-    findUIElements();
     initTemplateEventHandlers();
 
     initSettings();

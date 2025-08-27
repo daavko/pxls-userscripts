@@ -6,6 +6,7 @@ import {
 import { bindWebSocketProxy } from '../modules/websocket';
 import boardModuleFnSrc from './module-replacer-modules/board.pxls-module';
 import chromeOffsetWorkaroundModuleFnSrc from './module-replacer-modules/chrome-offset-workaround.pxls-module';
+import coordsModuleFnSrc from './module-replacer-modules/coords.pxls-module';
 import { PxlsUserscript } from './userscript';
 
 const boardModuleReplacement: ModuleReplacement = {
@@ -18,7 +19,12 @@ const chromeOffsetWorkaroundModuleReplacement: ModuleReplacement = {
     replacementFunctionSrc: chromeOffsetWorkaroundModuleFnSrc,
 };
 
-const PXLS_JS_HASH = '7536464be1e6f06b947e31ffbe893a26f1878cd1';
+const coordsModuleReplacement: ModuleReplacement = {
+    moduleName: 'coords',
+    replacementFunctionSrc: coordsModuleFnSrc,
+};
+
+const PXLS_JS_HASH = '698cf30e3c16ad8f1712171bd22ebfac0087b45adef3df2a7e1e13347ad63114';
 
 export class ModuleReplacerScript extends PxlsUserscript {
     constructor() {
@@ -51,6 +57,7 @@ export class ModuleReplacerScript extends PxlsUserscript {
         if (this.checkWebGL2Compatibility()) {
             registerModuleReplacement(PXLS_JS_HASH, boardModuleReplacement);
             registerModuleReplacement(PXLS_JS_HASH, chromeOffsetWorkaroundModuleReplacement);
+            registerModuleReplacement(PXLS_JS_HASH, coordsModuleReplacement);
         } else {
             this.messenger.showErrorMessage(
                 'Your browser does not support WebGL2, which is required for this script to work. If you think your browser supports WebGL2, please contact the script author.',
