@@ -403,7 +403,7 @@ const boardPanner = {
         boardPanner._addPointer(e, x, y, screenX, screenY);
     },
     pointerMove(e: PointerEvent): void {
-        if (boardPanner._panMode.mode === 'none' || !boardPanner._hasPointerId(e.pointerId)) {
+        if (boardPanner._panMode.mode === 'none' || !boardPanner.hasPointerId(e.pointerId)) {
             return;
         }
 
@@ -494,7 +494,7 @@ const boardPanner = {
             board.canvas.setPointerCapture(event.pointerId);
         }
     },
-    _hasPointerId(pointerId: number): boolean {
+    hasPointerId(pointerId: number): boolean {
         switch (boardPanner._panMode.mode) {
             case 'none':
                 return false;
@@ -586,6 +586,10 @@ const initInteraction = (): void => {
             return;
         }
 
+        if (e.altKey || e.ctrlKey || e.metaKey) {
+            return;
+        }
+
         switch (e.key) {
             case 'w':
             case 'ArrowUp':
@@ -661,6 +665,10 @@ const initInteraction = (): void => {
                 return;
             }
 
+            if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) {
+                return;
+            }
+
             let delta: number;
             switch (e.deltaMode) {
                 case WheelEvent.DOM_DELTA_PIXEL:
@@ -691,6 +699,10 @@ const initInteraction = (): void => {
         'pointerdown',
         (e) => {
             if (!e.isTrusted) {
+                return;
+            }
+
+            if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) {
                 return;
             }
 
@@ -737,6 +749,10 @@ const initInteraction = (): void => {
 
         switch (e.button) {
             case 0: // left button
+                if (!boardPanner.hasPointerId(e.pointerId) && (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey)) {
+                    return;
+                }
+
                 if (e.isPrimary) {
                     if (mouseHoldTimer != null) {
                         clearTimeout(mouseHoldTimer);
@@ -754,6 +770,10 @@ const initInteraction = (): void => {
                 }
                 break;
             case 2: {
+                if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) {
+                    return;
+                }
+
                 // right button
                 const { offsetX, offsetY } = e;
                 if (!board.screenSpaceCoordIsOnBoard(offsetX, offsetY)) {

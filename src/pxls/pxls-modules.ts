@@ -283,7 +283,7 @@ export interface PxlsSettingsModule {
             beneathoverlays: PxlsAppSetting<boolean>;
             opacity: PxlsAppSetting<number>;
             style: {
-                source: PxlsAppSetting<PxlsAppSettingType>;
+                source: PxlsAppSetting<string>;
                 customSource: PxlsAppSetting<string>;
             };
         };
@@ -386,10 +386,10 @@ export interface PxlsStorageModule {
 
 export interface PxlsTemplateModule {
     normalizeTemplateObj: {
-        (obj: PxlsAppTemplateUrlObject, dir?: true): PxlsAppTemplateObject;
-        (obj: PxlsAppTemplateObject, dir: false): PxlsAppTemplateUrlObject;
+        (obj: PxlsAppTemplateUrlObject, dir: true): PxlsAppTemplateObject;
+        (obj: PxlsAppTemplateObject, dir?: false): PxlsAppTemplateUrlObject;
     };
-    update: (options: PxlsAppTemplateObject, updateSettings?: boolean) => void;
+    update: (options: Partial<PxlsAppTemplateObject>, updateSettings?: boolean) => void;
     draw: (ctx: CanvasRenderingContext2D, x: number, y: number) => void;
     init: () => void;
     webinit: (data: PxlsInfoResponse) => void;
@@ -413,7 +413,7 @@ export interface PxlsUiHelperModule {
     styleElemWithChatNameColor: (elem: HTMLElement, colorIdx: number, layer: 'bg' | 'color') => void;
     setBannerEnabled: (enabled?: boolean) => void;
     readonly initTitle: string;
-    getTitle: (prepend: unknown) => string;
+    getTitle: (prepend?: unknown) => string;
     setLoadingBubbleState: (process: unknown, state: unknown) => void;
     makeMarkdownProcessor: (whitelist: unknown) => unknown;
     toggleCaptchaLoading: (display?: boolean) => void;
@@ -511,7 +511,7 @@ export interface PxlsAppSetting<SettingType extends PxlsAppSettingType> {
     get: () => SettingType;
     set: (value: SettingType) => void;
     reset: () => void;
-    listen: (fn: () => void) => void;
+    listen: (fn: (value: SettingType) => void) => void;
     unlisten: (fn: () => void) => void;
     controls: {
         add: (control: JQuery | HTMLElement) => void;
