@@ -168,7 +168,7 @@ export interface PxlsPanelsModule {
 export interface PxlsPlaceModule {
     init: () => void;
     update: (x?: number, y?: number) => void;
-    place: (x: number, y: number, color: number | null) => void;
+    place: (x: number, y: number, color?: number | null) => void;
     switch: (color: number) => void;
     setPalette: (palette: PxlsInfoResponse['palette']) => void;
     readonly palette: PxlsInfoResponse['palette'];
