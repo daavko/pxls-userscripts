@@ -120,6 +120,7 @@ export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderabl
 
     private readonly rect: DOMRect;
     private readonly textureBufferData: Uint32Array;
+    private readonly textureBufferWebGLView: Uint8Array;
     // todo: instead of this, maybe use update regions that get triggered whenever the texture is changed in that region...
     //  then we can update only those regions and save some memory bandwith
     private textureChangedSinceLastRender = true;
@@ -135,20 +136,28 @@ export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderabl
     ]);
     private vertexBufferData: Float32Array;
 
-    // private texCoordBuffer: WebGLBuffer | null = null;
-    // private vertexBuffer: WebGLBuffer | null = null;
-    // private vao: WebGLVertexArrayObject | null = null;
-    // private program: WebGLProgram | null = null;
-
     private persistentState: PersistentCanvasLayerState | null = null;
 
-    protected constructor(name: string, title: string, rect: DOMRect) {
+    protected abstract readonly vertexShaderSource: string;
+    protected abstract readonly fragmentShaderSource: string;
+
+    protected constructor(name: string, title: string, rect: DOMRect, textureBuffer?: Uint32Array) {
         this.name = name;
         this.title = title;
 
         // copy to avoid external mutations
         this.rect = new DOMRect(rect.x, rect.y, rect.width, rect.height);
-        this.textureBufferData = new Uint32Array(rect.width * rect.height);
+        if (textureBuffer) {
+            if (textureBuffer.length !== rect.width * rect.height) {
+                throw new Error(
+                    `Provided texture buffer size ${textureBuffer.length} does not match expected size of ${rect.width * rect.height}`,
+                );
+            }
+            this.textureBufferData = new Uint32Array(textureBuffer);
+        } else {
+            this.textureBufferData = new Uint32Array(rect.width * rect.height);
+        }
+        this.textureBufferWebGLView = new Uint8Array(this.textureBufferData.buffer);
         this.vertexBufferData = this.createVertexBufferData();
     }
 
@@ -168,9 +177,9 @@ export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderabl
         return this.rect.height;
     }
 
-    protected abstract get vertexShaderSource(): string;
-
-    protected abstract get fragmentShaderSource(): string;
+    get initialized(): boolean {
+        return this.persistentState != null;
+    }
 
     set x(value: number) {
         this.rect.x = value;
@@ -182,6 +191,11 @@ export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderabl
     }
 
     init(ctx: WebGL2RenderingContext): void {
+        if (this.persistentState != null) {
+            console.warn(`Render layer "${this.name}" already initialized, skipping`);
+            return;
+        }
+
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
         const maxTextureSize = ctx.getParameter(ctx.MAX_TEXTURE_SIZE) as number;
         if (this.rect.width > maxTextureSize || this.rect.height > maxTextureSize) {
@@ -209,7 +223,7 @@ export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderabl
             return;
         }
 
-        const { program, vertexBuffer, vao } = this.persistentState;
+        const { program, vertexBuffer, vao, texture } = this.persistentState;
 
         ctx.bindVertexArray(vao);
 
@@ -222,10 +236,12 @@ export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderabl
         ctx.useProgram(program);
         ctx.bindVertexArray(vao);
         this.fillVertexBuffer(ctx, vertexBuffer);
+        this.fillFullTexture(ctx, texture);
+        ctx.uniformMatrix3fv(ctx.getUniformLocation(program, 'u_matrix'), false, boardCtx.uniformMatrix);
+        ctx.uniform1i(ctx.getUniformLocation(program, 'u_texture'), 0);
         ctx.drawArrays(ctx.TRIANGLES, 0, 6);
 
         ctx.bindVertexArray(null);
-        ctx.deleteVertexArray(vao);
         ctx.bindBuffer(ctx.ARRAY_BUFFER, null);
         this.unbindTextureData(ctx);
         ctx.useProgram(null);
@@ -243,19 +259,39 @@ export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderabl
     }
 
     setPixel(x: number, y: number, color: number): void {
-        this.textureBufferData[this.getIndex(x, y)] = color;
+        const index = this.getIndex(x, y);
+        if (index == null) {
+            return;
+        }
+        this.textureBufferData[index] = color;
         this.textureChangedSinceLastRender = true;
     }
 
-    getPixel(x: number, y: number): number {
-        return this.textureBufferData[this.getIndex(x, y)];
+    setPixelByIndex(index: number, color: number): void {
+        if (index < 0 || index >= this.textureBufferData.length) {
+            return;
+        }
+        this.textureBufferData[index] = color;
+        this.textureChangedSinceLastRender = true;
     }
 
-    private getIndex(x: number, y: number): number {
-        if (x < 0 || x >= this.rect.width || y < 0 || y >= this.rect.height) {
-            throw new Error(`Pixel coordinates out of bounds: (${x}, ${y})`);
-        }
+    getPixel(x: number, y: number): number | undefined {
+        return this.textureBufferData.at(this.getIndexUnchecked(x, y));
+    }
+
+    getPixelByIndex(index: number): number | undefined {
+        return this.textureBufferData.at(index);
+    }
+
+    private getIndexUnchecked(x: number, y: number): number {
         return y * this.rect.width + x;
+    }
+
+    private getIndex(x: number, y: number): number | null {
+        if (x < 0 || x >= this.rect.width || y < 0 || y >= this.rect.height) {
+            return null;
+        }
+        return this.getIndexUnchecked(x, y);
     }
 
     private createVertexBufferData(): Float32Array {
@@ -287,7 +323,7 @@ export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderabl
         const location = ctx.getAttribLocation(state.program, attributeName);
         ctx.enableVertexAttribArray(location);
         ctx.bindBuffer(ctx.ARRAY_BUFFER, state.vertexBuffer);
-        ctx.vertexAttribPointer(0, 2, ctx.FLOAT, false, 0, 0);
+        ctx.vertexAttribPointer(location, 2, ctx.FLOAT, false, 0, 0);
     }
 
     private fillVertexBuffer(ctx: WebGL2RenderingContext, buffer: WebGLBuffer): void {
@@ -304,7 +340,7 @@ export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderabl
         ctx.enableVertexAttribArray(location);
         ctx.bindBuffer(ctx.ARRAY_BUFFER, state.texCoordBuffer);
         ctx.bufferData(ctx.ARRAY_BUFFER, this.texCoordBufferData, ctx.STATIC_DRAW);
-        ctx.vertexAttribPointer(0, 2, ctx.FLOAT, false, 0, 0);
+        ctx.vertexAttribPointer(location, 2, ctx.FLOAT, false, 0, 0);
     }
 
     private bindTextureData(ctx: WebGL2RenderingContext, state: PersistentCanvasLayerState): void {
@@ -330,7 +366,7 @@ export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderabl
             0,
             ctx.RGBA,
             ctx.UNSIGNED_BYTE,
-            this.textureBufferData,
+            this.textureBufferWebGLView,
         );
         this.textureChangedSinceLastRender = false;
     }

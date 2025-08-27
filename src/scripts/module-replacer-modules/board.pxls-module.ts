@@ -1,25 +1,31 @@
 import * as v from 'valibot';
 import { addStylesheet } from '../../modules/document';
-import type { PxlsAppTemplateConvertMode, PxlsBoardModule } from '../../pxls/pxls-modules';
-import type { BoardRenderingContext, PxlsExtendedBoardRenderable } from '../../pxls/pxls-modules-ext';
+import type { PxlsAppTemplateConvertMode, PxlsBoardModule, PxlsQueryModule } from '../../pxls/pxls-modules';
+import type {
+    BoardRenderingContext,
+    PxlsExtendedBoardModule,
+    PxlsExtendedBoardRenderable,
+} from '../../pxls/pxls-modules-ext';
 import type { PxlsInfoResponse } from '../../pxls/pxls-types';
 import { eventTargetIsTextInput } from '../../util/event';
-import { pointsDistance } from '../../util/geometry';
+import { type Point, pointsDistance } from '../../util/geometry';
 import { getUniformMatrix } from '../../util/matrix3';
-import { CanvasResizeWatcher } from '../../util/webgl';
+import { CanvasResizeWatcher, SimpleQuadRenderable } from '../../util/webgl';
 import boardStyle from './board.css';
+import boardFragmentShaderSource from './board.frag';
+import boardVertexShaderSource from './board.vert';
 import type { ModuleExport, ModuleImportFunction } from './types';
 import { DEFAULT_BROKEN_SCRIPT } from './util';
 
 declare const requireFn: ModuleImportFunction;
 declare const moduleExport: ModuleExport<'board'>;
 
-export const savedRenderLayerSchema = v.object({
+const savedRenderLayerSchema = v.object({
     name: v.string(),
     title: v.string(),
     active: v.boolean(),
 });
-export type SavedBoardLayer = v.InferOutput<typeof savedRenderLayerSchema>;
+type SavedBoardLayer = v.InferOutput<typeof savedRenderLayerSchema>;
 interface BoardLayer extends SavedBoardLayer {
     renderable?: PxlsExtendedBoardRenderable;
 }
@@ -28,6 +34,15 @@ interface BufferedPixel {
     x: number;
     y: number;
     color: number;
+}
+
+class BoardRenderable extends SimpleQuadRenderable {
+    protected readonly fragmentShaderSource = boardFragmentShaderSource;
+    protected readonly vertexShaderSource = boardVertexShaderSource;
+
+    constructor(rect: DOMRect, textureBuffer: Uint32Array) {
+        super('dpus_board', 'Board', rect, textureBuffer);
+    }
 }
 
 const { settings } = requireFn('./settings');
@@ -40,7 +55,8 @@ const { place } = requireFn('./place');
 const { template } = requireFn('./template');
 const { uiHelper } = requireFn('./uiHelper');
 const { chat } = requireFn('./chat');
-const { query } = requireFn('./query');
+// not 100% sure why query doesn't work if imported here, but pxls code is pxls code I guess
+let query: PxlsQueryModule | undefined;
 const { ls } = requireFn('./storage');
 const { grid } = requireFn('./grid');
 
@@ -50,7 +66,7 @@ let allowDrag = true;
 const board = {
     _canvas: document.createElement('canvas'),
     _imageData: null as ImageData | null,
-    _int32View: null as Int32Array | null,
+    _renderable: null as BoardRenderable | null,
     _imageUpdatedSinceLastRender: false,
     _panX: 0,
     _panY: 0,
@@ -64,9 +80,6 @@ const board = {
     get imageData(): ImageData | null {
         return board._imageData;
     },
-    get int32View(): Int32Array | null {
-        return board._int32View;
-    },
     get panX(): number {
         return board._panX;
     },
@@ -74,13 +87,16 @@ const board = {
         return board._panY;
     },
     get x(): number {
-        return board._panX - (board.width / 2) * board.scale;
+        return board._canvas.width / 2 - board._panX * board.scale;
     },
     get y(): number {
-        return board._panY - (board.height / 2) * board.scale;
+        return board._canvas.height / 2 - board._panY * board.scale;
     },
     get scale(): number {
         return board._scale;
+    },
+    get initialized(): boolean {
+        return board._initializedSize;
     },
     get width(): number {
         return board._width;
@@ -101,6 +117,7 @@ const board = {
             }
             board._panY = Math.max(0, Math.min(y, board.height));
         }
+        update();
     },
     setScale(newScale: number | string): void {
         const minScale = settings.board.zoom.limit.minimum.get();
@@ -140,6 +157,8 @@ const board = {
         }
 
         board._scale = newScale;
+
+        update();
     },
     nudgeScale(delta: number): void {
         const zoomBase = settings.board.zoom.sensitivity.get();
@@ -152,36 +171,44 @@ const board = {
         board._width = width;
         board._height = height;
         board._imageData = new ImageData(width, height);
-        board._int32View = new Int32Array(board._imageData.data.buffer);
+        board._renderable = new BoardRenderable(
+            new DOMRect(0, 0, width, height),
+            new Uint32Array(board._imageData.data.buffer),
+        );
         board._initializedSize = true;
+        update();
     },
-    setPixel(x: number, y: number, color: number, colorMode: 'index' | 'rgba'): void {
+    setRgbaPixel(x: number, y: number, color: number): void {
         x = Math.floor(x);
         y = Math.floor(y);
-        board.setPixelIndex(y * board.width + x, color, colorMode);
+        board._renderable?.setPixel(x, y, color);
     },
-    setPixelIndex(pixelIndex: number, colorOrIndex: number, colorMode: 'index' | 'rgba'): void {
-        if (board._int32View == null || pixelIndex < 0 || pixelIndex >= board.width * board.height) {
+    setPalettePixel(x: number, y: number, colorIndex: number): void {
+        const color = paletteRgbNumbers.at(colorIndex);
+        if (color == null) {
             return;
         }
-
-        let color: number;
-        switch (colorMode) {
-            case 'index': {
-                const maybeColor = paletteRgbNumbers.at(colorOrIndex);
-                if (maybeColor == null) {
-                    return;
-                }
-                color = maybeColor;
-                break;
-            }
-            case 'rgba': {
-                color = colorOrIndex;
-            }
+        board.setRgbaPixel(x, y, color);
+    },
+    setRgbaPixelByIndex(pixelIndex: number, color: number): void {
+        board._renderable?.setPixelByIndex(pixelIndex, color);
+    },
+    setPalettePixelByIndex(pixelIndex: number, colorIndex: number): void {
+        const color = paletteRgbNumbers.at(colorIndex);
+        if (color == null) {
+            return;
         }
-
-        board._int32View[pixelIndex] = color;
-        board._imageUpdatedSinceLastRender = true;
+        board.setRgbaPixelByIndex(pixelIndex, color);
+    },
+    getRgbaPixel(x: number, y: number): number | undefined {
+        return board._renderable?.getPixel(x, y);
+    },
+    getPalettePixel(x: number, y: number): number | undefined {
+        const color = board.getRgbaPixel(x, y);
+        if (color == null) {
+            return undefined;
+        }
+        return paletteRgbNumbers.indexOf(color);
     },
     insertCanvasIntoDom(): void {
         const container = document.querySelector('#board-container');
@@ -194,15 +221,30 @@ const board = {
         board.canvas.classList.add('board', 'noselect', 'dpus__mr-board');
         container.appendChild(board.canvas);
     },
-    screenSpaceCoordsToBoardSpace(screenX: number, screenY: number): { x: number; y: number } {
-        const boardX = board.panX + (screenX - board.canvas.width / 2) * board.scale;
-        const boardY = board.panY + (screenY - board.canvas.height / 2) * board.scale;
+    registerToRenderer(): void {
+        if (board._renderable) {
+            webGlRenderer.registerLayer(board._renderable);
+        }
+    },
+    screenSpaceCoordsToBoardSpaceUnclamped(screenX: number, screenY: number): { x: number; y: number } {
+        const boardX = (screenX - board.x) / board.scale;
+        const boardY = (screenY - board.y) / board.scale;
         return { x: boardX, y: boardY };
+    },
+    screenSpaceCoordsToBoardSpace(screenX: number, screenY: number): { x: number; y: number } {
+        const { x: boardX, y: boardY } = board.screenSpaceCoordsToBoardSpaceUnclamped(screenX, screenY);
+        const clampedX = Math.max(0, Math.min(boardX, board.width - 1));
+        const clampedY = Math.max(0, Math.min(boardY, board.height - 1));
+        return { x: clampedX, y: clampedY };
     },
     boardSpaceCoordsToScreenSpace(boardX: number, boardY: number): { x: number; y: number } {
         const screenX = (boardX - board.panX) / board.scale + board.canvas.width / 2;
         const screenY = (boardY - board.panY) / board.scale + board.canvas.height / 2;
         return { x: screenX, y: screenY };
+    },
+    screenSpaceCoordIsOnBoard(screenX: number, screenY: number): boolean {
+        const { x, y } = board.screenSpaceCoordsToBoardSpaceUnclamped(screenX, screenY);
+        return x >= 0 && x < board.width && y >= 0 && y < board.height;
     },
 };
 
@@ -225,6 +267,32 @@ const webGlRenderer = {
         }
 
         webGlRenderer._context = gl;
+        for (const layer of webGlRenderer._layers) {
+            layer.renderable?.init(gl);
+        }
+        webGlRenderer._resizeWatcher.startWatching();
+    },
+    registerLayer(layer: PxlsExtendedBoardRenderable): void {
+        if (layer.initialized) {
+            throw new Error(`Layer "${layer.name}" is already initialized`);
+        }
+        const existingLayer = webGlRenderer._layers.find((l) => l.name === layer.name);
+        if (existingLayer) {
+            if (existingLayer.renderable != null) {
+                throw new Error(`Layer with name "${layer.name}" is already registered`);
+            }
+            existingLayer.renderable = layer;
+        } else {
+            this._layers.push({
+                name: layer.name,
+                title: layer.title,
+                active: true,
+                renderable: layer,
+            });
+        }
+        if (this._context != null) {
+            layer.init(this._context);
+        }
     },
     startRenderLoop(): void {
         requestAnimationFrame(() => {
@@ -260,9 +328,9 @@ const webGlRenderer = {
         }
 
         // todo: uncomment when ready
-        // requestAnimationFrame(() => {
-        //     webGlRenderer.render();
-        // });
+        requestAnimationFrame(() => {
+            webGlRenderer.render();
+        });
     },
     _collectRenderableLayers(): PxlsExtendedBoardRenderable[] {
         return webGlRenderer._layers
@@ -271,11 +339,6 @@ const webGlRenderer = {
             .filter((layer) => layer != null);
     },
 };
-
-interface Point {
-    x: number;
-    y: number;
-}
 
 interface PointerCoordinates {
     board: Point;
@@ -398,6 +461,7 @@ const boardPanner = {
                     },
                 };
             }
+            board.canvas.setPointerCapture(event.pointerId);
         } else if (
             boardPanner._panMode.mode === 'double' &&
             event.pointerType === 'touch' &&
@@ -419,6 +483,7 @@ const boardPanner = {
                 screen: { ...firstCurrentCoords },
             };
             boardPanner._minPanDistanceFuseBroken = true;
+            board.canvas.setPointerCapture(event.pointerId);
         }
     },
     _hasPointerId(pointerId: number): boolean {
@@ -438,6 +503,7 @@ const boardPanner = {
         if (boardPanner._panMode.mode === 'single' && boardPanner._panMode.data.pointerId === pointerId) {
             boardPanner._panMode = { mode: 'none' };
             boardPanner._minPanDistanceFuseBroken = false;
+            board.canvas.releasePointerCapture(pointerId);
         } else if (boardPanner._panMode.mode === 'double') {
             if (boardPanner._panMode.first.pointerId === pointerId) {
                 if (boardPanner._panMode.second == null) {
@@ -447,16 +513,18 @@ const boardPanner = {
                     boardPanner._panMode.first = boardPanner._panMode.second;
                     boardPanner._panMode.second = undefined;
                 }
+                board.canvas.releasePointerCapture(pointerId);
             } else if (boardPanner._panMode.second?.pointerId === pointerId) {
                 boardPanner._panMode.second = undefined;
+                board.canvas.releasePointerCapture(pointerId);
             }
         }
     },
     _singlePointerPan(pointer: PointerData, delta: Point): void {
         if (boardPanner._minPanDistanceFuseBroken) {
             board.setPan({
-                x: board.panX - delta.x * board.scale,
-                y: board.panY - delta.y * board.scale,
+                x: board.panX - delta.x / board.scale,
+                y: board.panY - delta.y / board.scale,
             });
         } else {
             const distance = pointsDistance(
@@ -638,7 +706,7 @@ const initInteraction = (): void => {
     board.canvas.addEventListener(
         'pointermove',
         (e) => {
-            if (!e.isTrusted) {
+            if (!e.isTrusted && !allowDrag) {
                 return;
             }
 
@@ -667,11 +735,25 @@ const initInteraction = (): void => {
                 e.preventDefault();
                 switch (settings.place.rightclick.action.get()) {
                     case 'clear':
-                    case 'copy':
+                        place.switch(-1);
+                        break;
+                    case 'copy': {
+                        // todo: needs fixing, selects wrong index
+                        // const { x, y } = board.screenSpaceCoordsToBoardSpace(e.offsetX, e.offsetY);
+                        // const color = board.getPalettePixel(x, y);
+                        // if (color != null && color >= 0) {
+                        //     place.switch(color);
+                        // }
+                        break;
+                    }
                     case 'lookup':
+                        lookup.runLookup(e.offsetX, e.offsetY);
+                        break;
                     case 'clearlookup':
+                        place.switch(-1);
+                        lookup.runLookup(e.offsetX, e.offsetY);
+                        break;
                 }
-                // todo: right mouse button action
                 break;
         }
     });
@@ -695,6 +777,7 @@ const initInteraction = (): void => {
 };
 
 const init = (): void => {
+    query = requireFn('./query').query;
     $(window).on('pxls:queryUpdated', (evt, propName: string, oldValue: string | null, newValue: string | null) => {
         const nullish = newValue == null;
         switch (propName.toLowerCase()) {
@@ -735,7 +818,6 @@ const init = (): void => {
         }
     });
 
-    // todo: initialize canvas
     board.insertCanvasIntoDom();
     webGlRenderer.init();
     initInteraction();
@@ -748,16 +830,17 @@ const drawBoard = async (): Promise<void> => {
     paletteRgbNumbers.push(...place.getPaletteABGR());
 
     for (let i = 0; i < boardData.length; i++) {
-        board.setPixelIndex(i, boardData[i], 'index');
+        board.setPalettePixelByIndex(i, boardData[i]);
     }
 
     boardExport.update(false);
     loaded = true;
     for (const pixel of pixelReplay) {
-        board.setPixel(pixel.x, pixel.y, pixel.color, 'index');
+        board.setPalettePixel(pixel.x, pixel.y, pixel.color);
     }
     pixelReplay.length = 0;
 
+    board.registerToRenderer();
     webGlRenderer.startRenderLoop();
 };
 
@@ -782,22 +865,22 @@ const start = (): void => {
             }
 
             board.setSize(data.width, data.height);
-            board.setPan({ x: query.get('x') ?? data.width / 2, y: query.get('y') ?? data.height / 2 });
-            board.setScale(query.get('scale') ?? 1);
+            board.setPan({ x: query?.get('x') ?? data.width / 2, y: query?.get('y') ?? data.height / 2 });
+            board.setScale(query?.get('scale') ?? 1);
 
             socket.init();
 
-            const templateUrl = query.get('template');
+            const templateUrl = query?.get('template');
             if (templateUrl != null) {
                 template.queueUpdate({
                     use: true,
-                    x: parseFloat(query.get('x') ?? '0'),
-                    y: parseFloat(query.get('y') ?? '0'),
-                    width: parseFloat(query.get('tw') ?? '0'),
-                    title: query.get('title') ?? '',
+                    x: parseFloat(query?.get('x') ?? '0'),
+                    y: parseFloat(query?.get('y') ?? '0'),
+                    width: parseFloat(query?.get('tw') ?? '0'),
+                    title: query?.get('title') ?? '',
                     url: templateUrl,
                     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- original code does this
-                    convertMode: (query.get('convert') as PxlsAppTemplateConvertMode | undefined) ?? 'nearestCustom',
+                    convertMode: (query?.get('convert') as PxlsAppTemplateConvertMode | undefined) ?? 'nearestCustom',
                 });
             }
 
@@ -820,7 +903,7 @@ const start = (): void => {
 
 const update = (optional?: boolean, ignoreCanvasLock = false): boolean => {
     if (loaded) {
-        query.set(
+        query?.set(
             {
                 x: Math.round(board.panX).toString(),
                 y: Math.round(board.panY).toString(),
@@ -861,14 +944,12 @@ const boardExport: PxlsBoardModule = {
         if (!boardExport.validateCoordinates(x, y) || !loaded) {
             return 0xff;
         }
-        const int32View = board.int32View;
-        if (!int32View) {
-            return 0xff;
-        }
         x = Math.floor(x);
         y = Math.floor(y);
-        const color = int32View[y * board.width + x];
-        const colorIndex = paletteRgbNumbers.indexOf(color);
+        const colorIndex = board.getPalettePixel(x, y);
+        if (colorIndex == null) {
+            return 0xff;
+        }
         if (colorIndex === -1) {
             return 0xff;
         } else {
@@ -876,7 +957,7 @@ const boardExport: PxlsBoardModule = {
         }
     },
     setPixelIndex: (x, y, color, refresh = true): void => {
-        if (!loaded || board.int32View == null) {
+        if (!loaded || !board.initialized) {
             pixelReplay.push({ x, y, color });
             return;
         }
@@ -892,7 +973,7 @@ const boardExport: PxlsBoardModule = {
             return;
         }
 
-        board.setPixel(x, y, colorRgb, 'rgba');
+        board.setRgbaPixel(x, y, colorRgb);
         if (refresh) {
             boardExport.update(false);
         }
@@ -922,8 +1003,8 @@ const boardExport: PxlsBoardModule = {
         }
         boardExport.update(false, ignoreLock);
     },
-    getRenderBoard: (): HTMLCanvasElement => {
-        return board.canvas;
+    getRenderBoard: (): JQuery<HTMLCanvasElement> => {
+        return $(board.canvas);
     },
     getContainer: (): HTMLElement => {
         // this only ever gets called in chromeOffsetWorkaround, but we replace that with a fake empty module so
@@ -967,5 +1048,18 @@ const boardExport: PxlsBoardModule = {
     },
 };
 moduleExport.exports.board = boardExport;
+
+const boardExtendedExport: PxlsExtendedBoardModule = {
+    registerRenderLayer: (layer): void => {
+        webGlRenderer.registerLayer(layer);
+    },
+    screenSpaceCoordIsOnBoard: (x, y): boolean => {
+        return board.screenSpaceCoordIsOnBoard(x, y);
+    },
+    get boardCanvas(): HTMLCanvasElement {
+        return board.canvas;
+    },
+};
+moduleExport.exports.boardExt = boardExtendedExport;
 
 export default DEFAULT_BROKEN_SCRIPT;

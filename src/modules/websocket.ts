@@ -63,8 +63,11 @@ class WebSocketProxy extends window.WebSocket {
         }
     }
 
-    override send(): void {
-        console.debug('WebSocketProxy tried to send');
+    override send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
+        if (data === '{"type":"ChatbanState"}') {
+            super.send(data);
+        }
+        console.debug('WebSocketProxy tried to send', data);
     }
 
     readonly #handleMessage = (event: MessageEvent<unknown>): void => {

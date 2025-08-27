@@ -1,4 +1,5 @@
 import type { NullishKeys } from '../util/types';
+import type { PxlsExtendedBoardModule } from './pxls-modules-ext';
 import type { PxlsInfoResponse, PxlsLookupResponse } from './pxls-types';
 
 export interface PxlsModules {
@@ -21,7 +22,7 @@ export interface PxlsModules {
 }
 
 export interface PxlsModulesImportMap {
-    './board': { board: PxlsBoardModule };
+    './board': { board: PxlsBoardModule; boardExt: PxlsExtendedBoardModule };
     './chat': { chat: PxlsChatModule };
     './chromeOffsetWorkaround': { chromeOffsetWorkaround: PxlsChromeOffsetWorkaroundModule };
     './coords': { coords: PxlsCoordsModule };
@@ -71,7 +72,7 @@ export interface PxlsBoardModule {
     toScreen: (boardX: number, boardY: number) => { x: number; y: number };
     save: () => void;
     centerOn: (x?: number | null, y?: number | null, ignoreLock?: boolean) => void;
-    getRenderBoard: () => HTMLCanvasElement;
+    getRenderBoard: () => JQuery<HTMLCanvasElement>;
     getContainer: () => HTMLElement;
     getWidth: () => number;
     getHeight: () => number;
