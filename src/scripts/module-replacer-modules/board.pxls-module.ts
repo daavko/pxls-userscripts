@@ -12,8 +12,8 @@ import { type Point, pointsDistance } from '../../util/geometry';
 import { getUniformMatrix } from '../../util/matrix3';
 import { CanvasResizeWatcher, SimpleQuadRenderable } from '../../util/webgl';
 import boardStyle from './board.css';
-import boardFragmentShaderSource from './board.frag';
-import boardVertexShaderSource from './board.vert';
+import boardVertexShaderSource from './shaders/simple-rect.vert';
+import boardFragmentShaderSource from './shaders/simple-texture.frag';
 import type { ModuleExport, ModuleImportFunction } from './types';
 import { DEFAULT_BROKEN_SCRIPT } from './util';
 
