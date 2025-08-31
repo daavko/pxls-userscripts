@@ -1,4 +1,10 @@
-import type { BoardRenderingContext, PxlsExtendedBoardRenderable } from '../pxls/pxls-modules-ext';
+import {
+    type BoardRenderingContext,
+    type ChangedRegionDefinition,
+    type PxlsExtendedBoardRenderable,
+    Renderable,
+    type RenderableTextureData,
+} from '../pxls/pxls-modules-ext';
 
 export function compileShader(
     gl: WebGL2RenderingContext,
@@ -106,24 +112,270 @@ export class CanvasResizeWatcher {
     };
 }
 
-interface PersistentCanvasLayerState {
+abstract class NewQuadRenderable extends Renderable {
+    protected _rect: DOMRect;
+
+    private readonly vertexBuffer: WebGLBuffer;
+    private vertexBufferData: Float32Array;
+    private readonly vao: WebGLVertexArrayObject;
+    private readonly texCoordBuffer: WebGLBuffer;
+    private readonly texCoordBufferData = new Float32Array([
+        0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0,
+    ]);
+
+    protected abstract activeProgram: WebGLProgram;
+
+    protected constructor(gl: WebGL2RenderingContext, rect: DOMRect) {
+        super(gl);
+
+        // copy to avoid external mutations
+        this._rect = DOMRect.fromRect(rect);
+        this.vertexBuffer = gl.createBuffer();
+        this.vertexBufferData = this.createVertexBufferData();
+        this.vao = gl.createVertexArray();
+        this.texCoordBuffer = gl.createBuffer();
+    }
+
+    get rect(): DOMRectReadOnly {
+        return this._rect;
+    }
+
+    set x(value: number) {
+        this._rect.x = value;
+        this.updateVertexBufferData();
+    }
+
+    set y(value: number) {
+        this._rect.y = value;
+        this.updateVertexBufferData();
+    }
+
+    protected set width(value: number) {
+        this._rect.width = value;
+        this.updateVertexBufferData();
+    }
+
+    protected set height(value: number) {
+        this._rect.height = value;
+        this.updateVertexBufferData();
+    }
+
+    override render(projectionMatrixUniform: Float32Array): void {
+        this.prepareRenderingContext(projectionMatrixUniform);
+
+        const { gl } = this;
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        this.teardownRenderingContext();
+    }
+
+    override destroy(gl: WebGL2RenderingContext): void {
+        gl.deleteProgram(this.activeProgram);
+        gl.deleteBuffer(this.vertexBuffer);
+        gl.deleteBuffer(this.texCoordBuffer);
+        gl.deleteVertexArray(this.vao);
+    }
+
+    protected createProgram(vertexShaderSource: string, fragmentShaderSource: string): WebGLProgram {
+        const vertexShader = compileShader(this.gl, vertexShaderSource, this.gl.VERTEX_SHADER);
+        const fragmentShader = compileShader(this.gl, fragmentShaderSource, this.gl.FRAGMENT_SHADER);
+        return createProgram(this.gl, vertexShader, fragmentShader);
+    }
+
+    protected prepareRenderingContext(projectionMatrixUniform: Float32Array): void {
+        const { activeProgram, gl, vao } = this;
+
+        gl.bindVertexArray(vao);
+        this.bindBuffers();
+
+        gl.useProgram(activeProgram);
+        gl.bindVertexArray(vao);
+        this.fillBufferData();
+        this.setUniforms(projectionMatrixUniform);
+    }
+
+    protected teardownRenderingContext(): void {
+        const { gl } = this;
+
+        this.unbindBuffers();
+        gl.useProgram(null);
+    }
+
+    protected bindBuffers(): void {
+        const { activeProgram, gl, vertexBuffer, texCoordBuffer } = this;
+
+        const positionLocation = gl.getAttribLocation(activeProgram, 'a_position');
+        const texCoordLocation = gl.getAttribLocation(activeProgram, 'a_texCoord');
+
+        gl.enableVertexAttribArray(positionLocation);
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+        gl.enableVertexAttribArray(texCoordLocation);
+        gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, this.texCoordBufferData, gl.STATIC_DRAW);
+        gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
+    }
+
+    protected unbindBuffers(): void {
+        const { gl } = this;
+        gl.bindVertexArray(null);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    }
+
+    protected fillBufferData(): void {
+        const { gl, vertexBuffer } = this;
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, this.vertexBufferData, gl.DYNAMIC_DRAW);
+    }
+
+    protected setUniforms(projectionMatrixUniform: Float32Array): void {
+        const { activeProgram, gl } = this;
+        const projectionMatrixLocation = gl.getUniformLocation(activeProgram, 'u_matrix');
+        gl.uniformMatrix3fv(projectionMatrixLocation, false, projectionMatrixUniform);
+    }
+
+    private createVertexBufferData(): Float32Array {
+        const { left: x1, top: y1, right: x2, bottom: y2 } = this.rect;
+        return new Float32Array([x1, y1, x2, y1, x1, y2, x1, y2, x2, y1, x2, y2]);
+    }
+
+    private updateVertexBufferData(): void {
+        this.vertexBufferData = this.createVertexBufferData();
+    }
+}
+
+export abstract class NewSimpleQuadRenderable extends NewQuadRenderable {
+    private readonly texture: WebGLTexture;
+    private readonly dataProvider: RenderableTextureData<Uint32Array>;
+    private textureInitialized = false;
+
+    protected constructor(gl: WebGL2RenderingContext, rect: DOMRect, dataProvider: RenderableTextureData<Uint32Array>) {
+        super(gl, rect);
+
+        this.texture = gl.createTexture();
+        this.dataProvider = dataProvider;
+    }
+
+    protected override bindBuffers(): void {
+        super.bindBuffers();
+
+        const { gl, texture } = this;
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    }
+
+    protected override unbindBuffers(): void {
+        const { gl } = this;
+        gl.bindTexture(gl.TEXTURE_2D, null);
+        super.unbindBuffers();
+    }
+
+    protected override fillBufferData(): void {
+        super.fillBufferData();
+        if (!this.textureInitialized) {
+            this.fillFullTextureData(this.gl);
+            return;
+        }
+
+        const changed = this.dataProvider.dataChanged;
+        if (typeof changed === 'boolean') {
+            if (changed) {
+                this.fillFullTextureData(this.gl);
+            }
+        } else {
+            if (changed.length > 0) {
+                this.fillPartialTextureData(this.gl, changed);
+            }
+        }
+    }
+
+    protected override setUniforms(projectionMatrixUniform: Float32Array): void {
+        super.setUniforms(projectionMatrixUniform);
+
+        const { activeProgram, gl } = this;
+        const textureLocation = gl.getUniformLocation(activeProgram, 'u_texture');
+        gl.uniform1i(textureLocation, 0);
+    }
+
+    private fillFullTextureData(gl: WebGL2RenderingContext): void {
+        const data = this.dataProvider.data;
+        if (data == null) {
+            return;
+        }
+
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA,
+            this.rect.width,
+            this.rect.height,
+            0,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            new Uint8Array(data.buffer),
+        );
+        this.textureInitialized = true;
+    }
+
+    private fillPartialTextureData(gl: WebGL2RenderingContext, changedRegions: ChangedRegionDefinition[]): void {
+        const data = this.dataProvider.data;
+        if (data == null) {
+            return;
+        }
+
+        const glTextureView = new Uint8Array(data.buffer);
+        for (const region of changedRegions) {
+            let regionStart: number;
+            let regionHeight: number;
+            if (typeof region === 'number') {
+                regionStart = region;
+                regionHeight = 1;
+            } else {
+                [regionStart, regionHeight] = region;
+            }
+            const subView = this.createTextureSubview(glTextureView, regionStart, regionHeight);
+            gl.texSubImage2D(
+                gl.TEXTURE_2D,
+                0,
+                0,
+                regionStart,
+                this.rect.width,
+                regionHeight,
+                gl.RGBA,
+                gl.UNSIGNED_BYTE,
+                subView,
+            );
+        }
+    }
+
+    private createTextureSubview(textureData: Uint8Array, y: number, height: number): Uint8Array {
+        return textureData.subarray(y * this.rect.width * 4, (y + height) * this.rect.width * 4);
+    }
+}
+
+export interface PersistentQuadRenderableState {
     program: WebGLProgram;
-    texCoordBuffer: WebGLBuffer;
     vertexBuffer: WebGLBuffer;
     vao: WebGLVertexArrayObject;
+    texCoordBuffer: WebGLBuffer;
+}
+
+export interface PersistentSingleTextureState {
     texture: WebGLTexture;
 }
 
-export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderable {
+export abstract class QuadRenderable implements PxlsExtendedBoardRenderable {
     readonly name: string;
     readonly title: string;
 
-    private readonly rect: DOMRect;
-    private readonly textureBufferData: Uint32Array;
-    private readonly textureBufferWebGLView: Uint8Array;
-    // todo: instead of this, maybe use update regions that get triggered whenever the texture is changed in that region...
-    //  then we can update only those regions and save some memory bandwith
-    private textureChangedSinceLastRender = true;
+    protected readonly rect: DOMRect;
+
+    protected persistentState: PersistentQuadRenderableState | null = null;
 
     // prettier-ignore
     private readonly texCoordBufferData = new Float32Array([
@@ -136,28 +388,15 @@ export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderabl
     ]);
     private vertexBufferData: Float32Array;
 
-    private persistentState: PersistentCanvasLayerState | null = null;
-
     protected abstract readonly vertexShaderSource: string;
     protected abstract readonly fragmentShaderSource: string;
 
-    protected constructor(name: string, title: string, rect: DOMRect, textureBuffer?: Uint32Array) {
+    protected constructor(name: string, title: string, rect: DOMRect) {
         this.name = name;
         this.title = title;
 
         // copy to avoid external mutations
         this.rect = new DOMRect(rect.x, rect.y, rect.width, rect.height);
-        if (textureBuffer) {
-            if (textureBuffer.length !== rect.width * rect.height) {
-                throw new Error(
-                    `Provided texture buffer size ${textureBuffer.length} does not match expected size of ${rect.width * rect.height}`,
-                );
-            }
-            this.textureBufferData = new Uint32Array(textureBuffer);
-        } else {
-            this.textureBufferData = new Uint32Array(rect.width * rect.height);
-        }
-        this.textureBufferWebGLView = new Uint8Array(this.textureBufferData.buffer);
         this.vertexBufferData = this.createVertexBufferData();
     }
 
@@ -190,6 +429,16 @@ export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderabl
         this.updateVertexBufferData();
     }
 
+    protected set width(value: number) {
+        this.rect.width = value;
+        this.updateVertexBufferData();
+    }
+
+    protected set height(value: number) {
+        this.rect.height = value;
+        this.updateVertexBufferData();
+    }
+
     init(ctx: WebGL2RenderingContext): void {
         if (this.persistentState != null) {
             console.warn(`Render layer "${this.name}" already initialized, skipping`);
@@ -213,7 +462,6 @@ export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderabl
             texCoordBuffer: ctx.createBuffer(),
             vertexBuffer: ctx.createBuffer(),
             vao: ctx.createVertexArray(),
-            texture: ctx.createTexture(),
         };
     }
 
@@ -223,28 +471,9 @@ export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderabl
             return;
         }
 
-        const { program, vertexBuffer, vao, texture } = this.persistentState;
-
-        ctx.bindVertexArray(vao);
-
-        // todo: set uniforms
-        this.bindVertexBuffer(ctx, this.persistentState, 'a_position');
-        this.bindTexCoordBuffer(ctx, this.persistentState, 'a_texCoord');
-        this.bindTextureData(ctx, this.persistentState);
-
-        // todo: draw call
-        ctx.useProgram(program);
-        ctx.bindVertexArray(vao);
-        this.fillVertexBuffer(ctx, vertexBuffer);
-        this.fillFullTexture(ctx, texture);
-        ctx.uniformMatrix3fv(ctx.getUniformLocation(program, 'u_matrix'), false, boardCtx.uniformMatrix);
-        ctx.uniform1i(ctx.getUniformLocation(program, 'u_texture'), 0);
+        this.prepareRenderingContext(ctx, boardCtx, this.persistentState);
         ctx.drawArrays(ctx.TRIANGLES, 0, 6);
-
-        ctx.bindVertexArray(null);
-        ctx.bindBuffer(ctx.ARRAY_BUFFER, null);
-        this.unbindTextureData(ctx);
-        ctx.useProgram(null);
+        this.teardownRenderingContext(ctx);
     }
 
     destroy(ctx: WebGL2RenderingContext): void {
@@ -258,40 +487,32 @@ export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderabl
         this.persistentState = null;
     }
 
-    setPixel(x: number, y: number, color: number): void {
-        const index = this.getIndex(x, y);
-        if (index == null) {
-            return;
-        }
-        this.textureBufferData[index] = color;
-        this.textureChangedSinceLastRender = true;
+    protected prepareRenderingContext(
+        ctx: WebGL2RenderingContext,
+        boardCtx: BoardRenderingContext,
+        state: PersistentQuadRenderableState,
+    ): void {
+        const { program, vertexBuffer, vao } = state;
+
+        ctx.bindVertexArray(vao);
+
+        this.bindVertexBuffer(ctx, state, 'a_position');
+        this.bindTexCoordBuffer(ctx, state, 'a_texCoord');
+        this.bindTextureData(ctx, state);
+
+        ctx.useProgram(program);
+        ctx.bindVertexArray(vao);
+        this.fillVertexBuffer(ctx, vertexBuffer);
+        this.fillTextureData(ctx);
+        ctx.uniformMatrix3fv(ctx.getUniformLocation(program, 'u_matrix'), false, boardCtx.uniformMatrix);
+        ctx.uniform1i(ctx.getUniformLocation(program, 'u_texture'), 0);
     }
 
-    setPixelByIndex(index: number, color: number): void {
-        if (index < 0 || index >= this.textureBufferData.length) {
-            return;
-        }
-        this.textureBufferData[index] = color;
-        this.textureChangedSinceLastRender = true;
-    }
-
-    getPixel(x: number, y: number): number | undefined {
-        return this.textureBufferData.at(this.getIndexUnchecked(x, y));
-    }
-
-    getPixelByIndex(index: number): number | undefined {
-        return this.textureBufferData.at(index);
-    }
-
-    private getIndexUnchecked(x: number, y: number): number {
-        return y * this.rect.width + x;
-    }
-
-    private getIndex(x: number, y: number): number | null {
-        if (x < 0 || x >= this.rect.width || y < 0 || y >= this.rect.height) {
-            return null;
-        }
-        return this.getIndexUnchecked(x, y);
+    protected teardownRenderingContext(ctx: WebGL2RenderingContext): void {
+        ctx.bindVertexArray(null);
+        ctx.bindBuffer(ctx.ARRAY_BUFFER, null);
+        this.unbindTextureData(ctx);
+        ctx.useProgram(null);
     }
 
     private createVertexBufferData(): Float32Array {
@@ -317,7 +538,7 @@ export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderabl
 
     private bindVertexBuffer(
         ctx: WebGL2RenderingContext,
-        state: PersistentCanvasLayerState,
+        state: PersistentQuadRenderableState,
         attributeName: string,
     ): void {
         const location = ctx.getAttribLocation(state.program, attributeName);
@@ -333,7 +554,7 @@ export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderabl
 
     private bindTexCoordBuffer(
         ctx: WebGL2RenderingContext,
-        state: PersistentCanvasLayerState,
+        state: PersistentQuadRenderableState,
         attributeName: string,
     ): void {
         const location = ctx.getAttribLocation(state.program, attributeName);
@@ -343,36 +564,198 @@ export abstract class SimpleQuadRenderable implements PxlsExtendedBoardRenderabl
         ctx.vertexAttribPointer(location, 2, ctx.FLOAT, false, 0, 0);
     }
 
-    private bindTextureData(ctx: WebGL2RenderingContext, state: PersistentCanvasLayerState): void {
+    private unbindTextureData(ctx: WebGL2RenderingContext): void {
         ctx.activeTexture(ctx.TEXTURE0);
-        ctx.bindTexture(ctx.TEXTURE_2D, state.texture);
+        ctx.bindTexture(ctx.TEXTURE_2D, null);
+    }
+
+    protected abstract bindTextureData(ctx: WebGL2RenderingContext, state: PersistentQuadRenderableState): void;
+    protected abstract fillTextureData(ctx: WebGL2RenderingContext): void;
+}
+
+export abstract class SimpleQuadRenderable extends QuadRenderable {
+    protected textureState: PersistentSingleTextureState | null = null;
+
+    private textureInitialized = false;
+    private readonly textureBufferData: Uint32Array;
+    private readonly textureBufferWebGLView: Uint8Array;
+    private readonly changedRows = new Set<number>();
+
+    protected constructor(name: string, title: string, rect: DOMRect, textureBuffer?: Uint32Array) {
+        super(name, title, rect);
+
+        if (textureBuffer) {
+            if (textureBuffer.length !== rect.width * rect.height) {
+                throw new Error(
+                    `Provided texture buffer size ${textureBuffer.length} does not match expected size of ${rect.width * rect.height}`,
+                );
+            }
+            this.textureBufferData = new Uint32Array(textureBuffer);
+        } else {
+            this.textureBufferData = new Uint32Array(rect.width * rect.height);
+        }
+        this.textureBufferWebGLView = new Uint8Array(this.textureBufferData.buffer);
+    }
+
+    override init(ctx: WebGL2RenderingContext): void {
+        if (this.textureState != null) {
+            console.warn(`Render layer "${this.name}" already initialized, skipping`);
+            return;
+        }
+
+        super.init(ctx);
+
+        this.textureState = {
+            texture: ctx.createTexture(),
+        };
+    }
+
+    override destroy(ctx: WebGL2RenderingContext): void {
+        if (this.textureState != null) {
+            ctx.deleteTexture(this.textureState.texture);
+            this.textureState = null;
+        }
+        super.destroy(ctx);
+    }
+
+    setPixel(x: number, y: number, color: number): void {
+        const index = this.getIndex(x, y);
+        if (index == null) {
+            return;
+        }
+        this.textureBufferData[index] = color;
+        this.addChangedRow(y);
+    }
+
+    setPixelByIndex(index: number, color: number): void {
+        if (index < 0 || index >= this.textureBufferData.length) {
+            return;
+        }
+        this.textureBufferData[index] = color;
+        this.addChangedRow(Math.floor(index / this.rect.width));
+    }
+
+    getPixel(x: number, y: number): number | undefined {
+        return this.textureBufferData.at(this.getIndexUnchecked(x, y));
+    }
+
+    getPixelByIndex(index: number): number | undefined {
+        return this.textureBufferData.at(index);
+    }
+
+    protected getIndexUnchecked(x: number, y: number): number {
+        return y * this.rect.width + x;
+    }
+
+    protected getIndex(x: number, y: number): number | null {
+        if (x < 0 || x >= this.rect.width || y < 0 || y >= this.rect.height) {
+            return null;
+        }
+        return this.getIndexUnchecked(x, y);
+    }
+
+    protected bindTextureData(ctx: WebGL2RenderingContext): void {
+        if (this.textureState == null) {
+            throw new Error(`Render layer "${this.name}" texture state not initialized, this should never happen`);
+        }
+
+        ctx.activeTexture(ctx.TEXTURE0);
+        ctx.bindTexture(ctx.TEXTURE_2D, this.textureState.texture);
         ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_WRAP_S, ctx.CLAMP_TO_EDGE);
         ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_WRAP_T, ctx.CLAMP_TO_EDGE);
         ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_MIN_FILTER, ctx.LINEAR);
         ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_MAG_FILTER, ctx.NEAREST);
     }
 
-    private fillFullTexture(ctx: WebGL2RenderingContext, texture: WebGLTexture): void {
-        if (!this.textureChangedSinceLastRender) {
+    protected fillTextureData(ctx: WebGL2RenderingContext): void {
+        if (this.textureInitialized && this.changedRows.size === 0) {
             return;
         }
-        ctx.bindTexture(ctx.TEXTURE_2D, texture);
-        ctx.texImage2D(
-            ctx.TEXTURE_2D,
-            0,
-            ctx.RGBA,
-            this.rect.width,
-            this.rect.height,
-            0,
-            ctx.RGBA,
-            ctx.UNSIGNED_BYTE,
-            this.textureBufferWebGLView,
-        );
-        this.textureChangedSinceLastRender = false;
+
+        if (this.textureState == null) {
+            throw new Error(`Render layer "${this.name}" texture state not initialized, this should never happen`);
+        }
+
+        ctx.bindTexture(ctx.TEXTURE_2D, this.textureState.texture);
+        if (this.textureInitialized) {
+            const changedRegions = this.collectChangedRegions();
+            for (const region of changedRegions) {
+                let regionStart: number;
+                let regionHeight: number;
+                let subView: Uint8Array;
+                if (typeof region === 'number') {
+                    regionStart = region;
+                    regionHeight = 1;
+                    subView = this.createTextureSubview(region, 1);
+                } else {
+                    regionStart = region[0];
+                    regionHeight = region[1] - region[0] + 1;
+                    subView = this.createTextureSubview(region[0], regionHeight);
+                }
+                ctx.texSubImage2D(
+                    ctx.TEXTURE_2D,
+                    0,
+                    0,
+                    regionStart,
+                    this.rect.width,
+                    regionHeight,
+                    ctx.RGBA,
+                    ctx.UNSIGNED_BYTE,
+                    subView,
+                );
+            }
+        } else {
+            ctx.texImage2D(
+                ctx.TEXTURE_2D,
+                0,
+                ctx.RGBA,
+                this.rect.width,
+                this.rect.height,
+                0,
+                ctx.RGBA,
+                ctx.UNSIGNED_BYTE,
+                this.textureBufferWebGLView,
+            );
+            this.textureInitialized = true;
+            this.changedRows.clear();
+        }
     }
 
-    private unbindTextureData(ctx: WebGL2RenderingContext): void {
-        ctx.activeTexture(ctx.TEXTURE0);
-        ctx.bindTexture(ctx.TEXTURE_2D, null);
+    private createTextureSubview(y: number, height: number): Uint8Array {
+        return this.textureBufferWebGLView.subarray(y * this.rect.width * 4, (y + height) * this.rect.width * 4);
+    }
+
+    private addChangedRow(y: number): void {
+        this.changedRows.add(y);
+    }
+
+    private collectChangedRegions(): (number | [number, number])[] {
+        const rows = Array.from(this.changedRows).sort((a, b) => a - b);
+
+        const regions = rows.reduce<(number | [number, number])[]>((acc, value, index) => {
+            if (index === 0) {
+                acc.push(value);
+                return acc;
+            }
+            const last = acc[acc.length - 1];
+            if (typeof last === 'number') {
+                if (value === last + 1) {
+                    acc[acc.length - 1] = [last, value];
+                } else {
+                    acc.push(value);
+                }
+                return acc;
+            } else {
+                if (value === last[1] + 1) {
+                    acc[acc.length - 1] = [last[0], value];
+                } else {
+                    acc.push(value);
+                }
+                return acc;
+            }
+        }, []);
+
+        this.changedRows.clear();
+        return regions;
     }
 }

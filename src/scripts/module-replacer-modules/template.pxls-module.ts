@@ -12,6 +12,11 @@ import type { PxlsInfoResponse } from '../../pxls/pxls-types';
 import { eventTargetIsTextInput } from '../../util/event';
 import type { Point } from '../../util/geometry';
 import type { NullishKeys } from '../../util/types';
+import {
+    type PersistentQuadRenderableState,
+    type PersistentSingleTextureState,
+    QuadRenderable,
+} from '../../util/webgl';
 import type { ModuleExport, ModuleImportFunction } from './types';
 import { DEFAULT_BROKEN_SCRIPT } from './util';
 
@@ -35,6 +40,141 @@ interface LoadedTemplate {
 interface QueuedOptionUpdate {
     options: NullishKeys<PxlsAppTemplateObject>;
     timer: number;
+}
+
+interface TemplateRenderableStyleModeNone {
+    mode: 'none';
+}
+
+interface TemplateRenderableStyleModeDotted {
+    mode: 'dotted';
+    dotSize: number;
+}
+
+interface TemplateRenderableStyleModeTextured {
+    mode: 'texture';
+    textureData: Uint8Array;
+    colorSize: number;
+    textureInitialized: boolean;
+}
+
+type TemplateRenderableStyleMode =
+    | TemplateRenderableStyleModeNone
+    | TemplateRenderableStyleModeDotted
+    | TemplateRenderableStyleModeTextured;
+
+type TemplateRenderableStyleInputMode =
+    | TemplateRenderableStyleModeNone
+    | TemplateRenderableStyleModeDotted
+    | Omit<TemplateRenderableStyleModeTextured, 'textureInitialized'>;
+
+interface StyledTemplateRenderableState {
+    template: PersistentSingleTextureState;
+    palettizedTemplate: PersistentSingleTextureState;
+    style: PersistentSingleTextureState;
+}
+
+class StyledTemplateRenderable extends QuadRenderable {
+    protected readonly fragmentShaderSource: string;
+    protected readonly vertexShaderSource: string;
+
+    protected textureState: StyledTemplateRenderableState | null = null;
+
+    private textureInitialized = false;
+    // original RGBA texture data
+    private textureBufferData: Uint32Array;
+    private textureBufferWebGLView: Uint8Array;
+    // RG texture data, red channel is palette index, green channel is alpha
+    private palettizedTextureBufferData: Uint16Array;
+    private palettizedTextureBufferWebGLView: Uint8Array;
+
+    private styleMode: TemplateRenderableStyleMode = { mode: 'none' };
+
+    constructor(rect: DOMRect) {
+        super('dpus_template', 'Template', rect);
+    }
+
+    override init(ctx: WebGL2RenderingContext): void {
+        if (this.textureState != null) {
+            console.warn('StyledTemplateRenderable: Texture state already initialized');
+            return;
+        }
+
+        super.init(ctx);
+
+        this.textureState = {
+            template: { texture: ctx.createTexture() },
+            palettizedTemplate: { texture: ctx.createTexture() },
+            style: { texture: ctx.createTexture() },
+        };
+    }
+
+    replaceTemplateTexture(imageData: ImageData, paletteRgbNumbers: number[]): void {
+        this.textureInitialized = false;
+        this.textureBufferData = new Uint32Array(imageData.data.buffer);
+        this.textureBufferWebGLView = new Uint8Array(imageData.data.buffer);
+        this.palettizedTextureBufferData = new Uint16Array(imageData.width * imageData.height);
+        this.palettizedTextureBufferWebGLView = new Uint8Array(this.palettizedTextureBufferData.buffer);
+
+        for (let i = 0; i < this.textureBufferData.length; i++) {
+            const rgba = this.textureBufferData[i];
+            const alpha = (rgba >> 24) & 0xff;
+            if (alpha === 0) {
+                this.palettizedTextureBufferData[i] = 0;
+                continue;
+            }
+            const paletteIndex = paletteRgbNumbers.indexOf(rgba);
+            if (paletteIndex === -1) {
+                // not found in palette, use transparent
+                this.palettizedTextureBufferData[i] = 0;
+            } else {
+                this.palettizedTextureBufferData[i] = (paletteIndex & 0xff) | ((alpha & 0xff) << 8);
+            }
+        }
+    }
+
+    replaceTemplateSize(width: number, height: number): void {
+        this.width = width;
+        this.height = height;
+    }
+
+    setStyleMode(mode: TemplateRenderableStyleInputMode): void {
+        if (this.styleMode.mode === mode.mode) {
+            switch (this.styleMode.mode) {
+                case 'dotted':
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
+                    this.styleMode.dotSize = (mode as TemplateRenderableStyleModeDotted).dotSize;
+                    break;
+                case 'texture': {
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe
+                    const { textureData, colorSize } = mode as TemplateRenderableStyleModeTextured;
+                    this.styleMode = { mode: 'texture', textureData, colorSize, textureInitialized: false };
+                }
+            }
+        } else {
+            if (mode.mode === 'texture') {
+                this.styleMode = { ...mode, textureInitialized: false };
+            } else {
+                this.styleMode = mode;
+            }
+        }
+    }
+
+    getPixel(x: number, y: number): number | undefined {
+        return this.textureBufferData.at(this.getIndexUnchecked(x, y));
+    }
+
+    getPixelByIndex(index: number): number | undefined {
+        return this.textureBufferData.at(index);
+    }
+
+    protected getIndexUnchecked(x: number, y: number): number {
+        return y * this.rect.width + x;
+    }
+
+    protected bindTextureData(ctx: WebGL2RenderingContext, state: PersistentQuadRenderableState): void {}
+
+    protected fillTextureData(ctx: WebGL2RenderingContext): void {}
 }
 
 const builtinStyles = new Map<string, string>();
@@ -356,6 +496,14 @@ const template = {
 
         if (uiHelper) {
             document.title = uiHelper.getTitle();
+        }
+
+        if (template.loadedImage) {
+            template.loadedImage.displayWidth =
+                template.options.width > 0 ? template.options.width : template.loadedImage.image.width;
+            template.loadedImage.displayHeight =
+                (template.loadedImage.displayWidth / template.loadedImage.image.width) *
+                template.loadedImage.image.height;
         }
     },
     _pointIsInTemplate: (point: Point): boolean => {
