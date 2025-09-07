@@ -8,7 +8,7 @@ import type {
 } from '../../pxls/pxls-modules-ext';
 import type { PxlsInfoResponse } from '../../pxls/pxls-types';
 import { eventTargetIsTextInput } from '../../util/event';
-import { type Point, pointsDistance } from '../../util/geometry';
+import { midpoint, type Point, pointsDistance } from '../../util/geometry';
 import { getUniformMatrix } from '../../util/matrix3';
 import { CanvasResizeWatcher, SimpleQuadRenderable } from '../../util/webgl';
 import boardStyle from './board.css';
@@ -493,6 +493,7 @@ const boardPanner = {
                 board: firstCurrentBoardCoords,
                 screen: { ...firstCurrentCoords },
             };
+            boardPanner._panMode.startScale = board.scale;
             boardPanner._minPanDistanceFuseBroken = true;
             board.canvas.setPointerCapture(event.pointerId);
         }
@@ -538,25 +539,29 @@ const boardPanner = {
                 y: board.panY - delta.y / board.scale,
             });
         } else {
-            const distance = pointsDistance(
-                pointer.down.screen.x,
-                pointer.down.screen.y,
-                pointer.current.x,
-                pointer.current.y,
-            );
+            const distance = pointsDistance(pointer.down.screen, pointer.current);
             if (distance >= boardPanner._MIN_PAN_DISTANCE) {
                 boardPanner._minPanDistanceFuseBroken = true;
             }
         }
     },
     _twoPointerPan(firstPointer: PointerData, secondPointer: PointerData, startScale: number): void {
-        // todo
-        // we need to calculate the desired pan and scale based on the current positions of the two pointers
-        // we know the original board coordinates and screen coordinates of both pointers when they were pressed down,
-        // and we simply need to recalculate the panX, panY and scale that would result in the same board positions with the new screen coordinates
-        // actually we don't need to do any of that
-        // simply measure the distance between pointers, compare to the original distance, that's your new scale based on the old scale
-        // simply find the midpoint, that's your panning point, bam, panned
+        // todo: verify that this works correctly
+        const startDistance = pointsDistance(firstPointer.down.screen, secondPointer.down.screen);
+        const currentDistance = pointsDistance(firstPointer.current, secondPointer.current);
+        const newScale = (currentDistance / startDistance) * startScale;
+
+        const startMidpoint = midpoint(firstPointer.down.screen, secondPointer.down.screen);
+        const currentMidpoint = midpoint(firstPointer.current, secondPointer.current);
+        const midpointDelta: Point = {
+            x: currentMidpoint.x - startMidpoint.x,
+            y: currentMidpoint.y - startMidpoint.y,
+        };
+        board.setScale(newScale);
+        board.setPan({
+            x: board.panX - midpointDelta.x / board.scale,
+            y: board.panY - midpointDelta.y / board.scale,
+        });
     },
 };
 

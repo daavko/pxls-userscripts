@@ -21,7 +21,7 @@ import { detemplatizeImage, getTemplateImage } from '../modules/template';
 import { instanceUsesAllowlists, isUserInList } from '../modules/userlist';
 import type { PxlsApp } from '../pxls/pxls-global';
 import { eventTargetIsTextInput } from '../util/event';
-import { pointsDistance } from '../util/geometry';
+import { type Point, pointsDistance } from '../util/geometry';
 import { PxlsUserscript } from './userscript';
 
 const COORDS_REGEX = /^\(([0-9]+), ([0-9]+)\)$/;
@@ -46,7 +46,7 @@ export class AutoColorSelectorScript extends PxlsUserscript {
     private currentCoordX: number | null = null;
     private currentCoordY: number | null = null;
 
-    private pointerDownCoords: { x: number; y: number } | null = null;
+    private pointerDownCoords: Point | null = null;
 
     private manualToggle = true;
     private pointerMoveFuse = false;
@@ -187,7 +187,7 @@ export class AutoColorSelectorScript extends PxlsUserscript {
                 }
 
                 const coords = { x: clientX, y: clientY };
-                const distance = pointsDistance(coords.x, coords.y, this.pointerDownCoords.x, this.pointerDownCoords.y);
+                const distance = pointsDistance(coords, this.pointerDownCoords);
                 if (distance > 5) {
                     debug(`Pointer move fuse triggered at ${coords.x},${coords.y} distance ${distance}`);
                     this.pointerMoveFuse = true;
