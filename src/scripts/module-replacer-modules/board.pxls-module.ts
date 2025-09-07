@@ -375,6 +375,7 @@ interface TwoPointerPanModePointer {
     mode: 'double';
     first: PointerData;
     second?: PointerData;
+    startScale: number;
 }
 
 type PanMode = DisabledPanMode | SinglePointerPanMode | TwoPointerPanModePointer;
@@ -428,7 +429,8 @@ const boardPanner = {
                 }
 
                 if (boardPanner._panMode.second != null) {
-                    boardPanner._twoPointerPan(boardPanner._panMode.first, boardPanner._panMode.second);
+                    const { first, second, startScale } = boardPanner._panMode;
+                    boardPanner._twoPointerPan(first, second, startScale);
                 } else {
                     boardPanner._singlePointerPan(boardPanner._panMode.first, firstDelta);
                 }
@@ -458,6 +460,7 @@ const boardPanner = {
                         down: { board: { x: boardX, y: boardY }, screen: { x: screenX, y: screenY } },
                         current: { x: screenX, y: screenY },
                     },
+                    startScale: board.scale,
                 };
             } else {
                 boardPanner._panMode = {
@@ -546,11 +549,14 @@ const boardPanner = {
             }
         }
     },
-    _twoPointerPan(firstPointer: PointerData, secondPointer: PointerData): void {
+    _twoPointerPan(firstPointer: PointerData, secondPointer: PointerData, startScale: number): void {
         // todo
         // we need to calculate the desired pan and scale based on the current positions of the two pointers
         // we know the original board coordinates and screen coordinates of both pointers when they were pressed down,
         // and we simply need to recalculate the panX, panY and scale that would result in the same board positions with the new screen coordinates
+        // actually we don't need to do any of that
+        // simply measure the distance between pointers, compare to the original distance, that's your new scale based on the old scale
+        // simply find the midpoint, that's your panning point, bam, panned
     },
 };
 
