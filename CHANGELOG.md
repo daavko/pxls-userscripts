@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## DPUS v1.6.0
+
+- Make template info work with new info bubble styles
+- Add toggleable style that change how the new info bubble style looks
+- Add toggleable style that removes the "Move Template Here" button from pixel lookups
+
 ## DPUS v1.5.1
 
 - Make it possible to use alpha in colors in the flasher script
