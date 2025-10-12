@@ -1,0 +1,15 @@
+#bubble-content {
+    padding: 0.75rem;
+}
+
+#main-bubble:has(.dpus__template-info) #bubble-content {
+    padding: 0.5rem;
+}
+
+#main-bubble #setting-ui-bubble-compact {
+    background-color: transparent;
+}
+
+.dpus__template-info {
+    padding: 0.5rem;
+}

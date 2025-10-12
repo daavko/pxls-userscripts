@@ -1,9 +1,10 @@
 import { debug } from './modules/debug';
+import { addStylesheet, removeStylesheet } from './modules/document';
 import { Messenger } from './modules/message';
 import { waitForApp } from './modules/pxls-init';
 import { initTemplateEventHandlers } from './modules/pxls-template';
 import { findUIElements } from './modules/pxls-ui';
-import { BooleanSetting, GLOBAL_SETTINGS, Settings } from './modules/settings';
+import { BooleanSetting, GLOBAL_SETTINGS, Settings, type SettingUpdateCallback } from './modules/settings';
 import {
     createBooleanSetting,
     createLineBreak,
@@ -19,6 +20,8 @@ import { GriefTrackerScript } from './scripts/grief-tracker.user';
 import { MilestoneWatcherScript } from './scripts/milestone-watcher.user';
 import { TemplateInfoScript } from './scripts/template-info.user';
 import type { PxlsUserscript } from './scripts/userscript';
+import bubbleUnstupidifierStyles from './styles/bubble-unstupidifier.css';
+import noMoveTemplateHereStyles from './styles/no-move-template-here.css';
 
 const messenger = new Messenger('DPUS');
 
@@ -28,7 +31,19 @@ const settings = Settings.create('global', {
     griefTrackerScriptEnabled: new BooleanSetting(false),
     milestoneWatcherScriptEnabled: new BooleanSetting(false),
     availablePixelsFlasherEnabled: new BooleanSetting(false),
+
+    bubbleUnstupidifierStyleEnabled: new BooleanSetting(false, [
+        createStyleSettingChangeHandler('dpus__global__bubble-unstupidifier'),
+    ]),
+    noMoveTemplateHereStyleEnabled: new BooleanSetting(false, [
+        createStyleSettingChangeHandler('dpus__global__no-move-template-here'),
+    ]),
 });
+
+const GLOBAL_STYLES = {
+    'dpus__global__bubble-unstupidifier': bubbleUnstupidifierStyles,
+    'dpus__global__no-move-template-here': noMoveTemplateHereStyles,
+} as const;
 
 function initSettings(): void {
     createSettingsUI('global', 'DPUS Global Settings', () => [
@@ -42,6 +57,11 @@ function initSettings(): void {
         createBooleanSetting(settings.griefTrackerScriptEnabled, 'Grief Tracker'),
         createBooleanSetting(settings.milestoneWatcherScriptEnabled, 'Milestone Watcher'),
         createBooleanSetting(settings.availablePixelsFlasherEnabled, 'Available Pixels Flasher'),
+        createLineBreak(),
+        createSubheading('Styles'),
+        createSettingsText('Those are just styles I prefer. Reload is not required for changes to take effect.'),
+        createBooleanSetting(settings.bubbleUnstupidifierStyleEnabled, 'Info bubble improvements'),
+        createBooleanSetting(settings.noMoveTemplateHereStyleEnabled, 'Remove "Move Template Here" button'),
         createSettingsResetButton(settings),
     ]);
 }
@@ -54,6 +74,20 @@ function dpusHasBeenLaunchedBefore(): boolean {
 
 function setDpusHasBeenLaunchedBefore(): void {
     window.localStorage.setItem(FIRST_LAUNCH_KEY, 'true');
+}
+
+function createStyleSettingChangeHandler(styleName: keyof typeof GLOBAL_STYLES): SettingUpdateCallback<boolean> {
+    return (_, newValue): void => {
+        handleStyleSettingChange(styleName, newValue);
+    };
+}
+
+function handleStyleSettingChange(styleName: keyof typeof GLOBAL_STYLES, enabled: boolean): void {
+    if (enabled) {
+        addStylesheet(styleName, GLOBAL_STYLES[styleName]);
+    } else {
+        removeStylesheet(styleName);
+    }
 }
 
 async function init(): Promise<void> {
@@ -82,6 +116,14 @@ async function init(): Promise<void> {
         setDpusHasBeenLaunchedBefore();
     }
 
+    const styles: (keyof typeof GLOBAL_STYLES)[] = [];
+    if (settings.bubbleUnstupidifierStyleEnabled.get()) {
+        styles.push('dpus__global__bubble-unstupidifier');
+    }
+    if (settings.noMoveTemplateHereStyleEnabled.get()) {
+        styles.push('dpus__global__no-move-template-here');
+    }
+
     const failedScripts = new Set<string>();
     for (const script of scripts) {
         if (script.beforeApp) {
@@ -99,6 +141,10 @@ async function init(): Promise<void> {
                 failedScripts.add(script.name);
             }
         }
+    }
+
+    for (const style of styles) {
+        handleStyleSettingChange(style, true);
     }
 
     const app = await waitForApp();
