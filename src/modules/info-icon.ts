@@ -95,16 +95,7 @@ export function createInfoIcon<const T extends InfoIconState[]>(
 }
 
 export function getOrInitInfoIconsContainer(): Element {
-    if (INFO_ICONS_CONTAINER) {
-        return INFO_ICONS_CONTAINER;
-    }
-
-    const existingInfoIconContainer = document.querySelector('.dpus__info-icons');
-    if (existingInfoIconContainer) {
-        INFO_ICONS_CONTAINER = existingInfoIconContainer;
-    } else {
-        INFO_ICONS_CONTAINER = createInfoIconContainer();
-    }
+    INFO_ICONS_CONTAINER ??= document.querySelector('.dpus__info-icons') ?? createInfoIconContainer();
     return INFO_ICONS_CONTAINER;
 }
 

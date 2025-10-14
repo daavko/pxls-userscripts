@@ -111,10 +111,6 @@ export class AvailablePixelsFlasherScript extends PxlsUserscript {
         const stackCountElement = getPxlsUIPlaceableCount();
         const stackCountText = stackCountElement.textContent;
 
-        if (stackCountText == null) {
-            return;
-        }
-
         const pixelCount = stackCountText.split('/').at(0);
         if (pixelCount == null) {
             return;

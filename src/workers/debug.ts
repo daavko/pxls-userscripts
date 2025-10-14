@@ -12,20 +12,20 @@ export interface WorkerDebugTimer {
 }
 
 export function workerDebugTime(timerName: string): WorkerDebugTimer | null {
-    const timerNameWithId = `${timerName} (${globalThis.crypto.randomUUID()})`;
-    const fullTimingName = `[DPUS worker] ${timerNameWithId}`;
-    if (getWorkerDebugEnabled()) {
-        workerDebug(`${timerNameWithId} timer started`);
-        console.time(fullTimingName);
-        return {
-            stop: (): void => {
-                console.timeEnd(fullTimingName);
-            },
-            mark: (msg): void => {
-                console.timeLog(fullTimingName, msg);
-            },
-        };
-    } else {
+    if (!getWorkerDebugEnabled()) {
         return null;
     }
+
+    const timerNameWithId = `${timerName} (${globalThis.crypto.randomUUID()})`;
+    const fullTimingName = `[DPUS worker] ${timerNameWithId}`;
+    workerDebug(`${timerNameWithId} timer started`);
+    console.time(fullTimingName);
+    return {
+        stop: (): void => {
+            console.timeEnd(fullTimingName);
+        },
+        mark: (msg): void => {
+            console.timeLog(fullTimingName, msg);
+        },
+    };
 }

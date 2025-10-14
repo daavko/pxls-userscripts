@@ -177,10 +177,7 @@ async function init(): Promise<void> {
         }
         if (script.afterApp) {
             try {
-                const afterAppReturnValue = script.afterApp(app);
-                if (afterAppReturnValue instanceof Promise) {
-                    await afterAppReturnValue;
-                }
+                await Promise.try(script.afterApp, app);
             } catch (e: unknown) {
                 if (e instanceof Error) {
                     messenger.showErrorMessage(`Error in afterApp of script "${script.name}": ${e.message}`, e);
@@ -213,7 +210,6 @@ async function init(): Promise<void> {
 init().catch((e: unknown) => {
     if (e instanceof Error) {
         messenger.showErrorMessage(`Error during initialization: ${e.message}`, e);
-        return;
     } else {
         messenger.showErrorMessage('Unknown error during initialization', new Error('Unknown error', { cause: e }));
     }

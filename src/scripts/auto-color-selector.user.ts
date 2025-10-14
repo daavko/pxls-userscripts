@@ -243,8 +243,8 @@ export class AutoColorSelectorScript extends PxlsUserscript {
             return;
         }
 
-        const coordsText = getPxlsUIMouseCoords().textContent?.trim();
-        if (coordsText == null || coordsText === '') {
+        const coordsText = getPxlsUIMouseCoords().textContent.trim();
+        if (coordsText === '') {
             // empty is fine
             return;
         }

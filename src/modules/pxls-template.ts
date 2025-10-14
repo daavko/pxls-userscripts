@@ -135,19 +135,11 @@ export function initTemplateEventHandlers(): void {
         });
         getPxlsUITemplateXInput().addEventListener('change', function () {
             const value = this.valueAsNumber;
-            if (Number.isNaN(value)) {
-                changeTemplateDataProperty('x', null);
-            } else {
-                changeTemplateDataProperty('x', value);
-            }
+            changeTemplateDataProperty('x', Number.isNaN(value) ? null : value);
         });
         getPxlsUITemplateYInput().addEventListener('change', function () {
             const value = this.valueAsNumber;
-            if (Number.isNaN(value)) {
-                changeTemplateDataProperty('y', null);
-            } else {
-                changeTemplateDataProperty('y', value);
-            }
+            changeTemplateDataProperty('y', Number.isNaN(value) ? null : value);
         });
 
         const pxlsQueryUpdatedSchema = v.object({

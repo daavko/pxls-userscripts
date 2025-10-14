@@ -16,10 +16,8 @@ export function anyColorSelected(): boolean {
 export function selectColor(colorIndex: number): void {
     const buttons = getPxlsUIPaletteSelectionButtons();
     const button = buttons.at(colorIndex);
-    if (button) {
-        if (!button.classList.contains('active')) {
-            button.click();
-        }
+    if (button && !button.classList.contains('active')) {
+        button.click();
     }
 }
 
