@@ -1,17 +1,11 @@
 import { addStylesheet, createRandomElementId } from './document';
 import { el } from './html';
 import { GLOBAL_MESSENGER } from './message';
-import { BooleanSetting, Settings, type Setting } from './settings';
+import { BooleanSetting, type Setting, Settings } from './settings';
 import settingsUiStyle from './settings-ui.css';
 
 function getOrCreateSettingsContainer(): Element {
-    const settingsContainer = document.querySelector('aside#settings .dpus__settings-ui');
-
-    if (settingsContainer) {
-        return settingsContainer;
-    } else {
-        return createSettingsContainer();
-    }
+    return document.querySelector('aside#settings .dpus__settings-ui') ?? createSettingsContainer();
 }
 
 function createSettingsContainer(): Element {
@@ -80,27 +74,22 @@ export function createBooleanSetting(setting: Setting<unknown, boolean>, label: 
 export function createNumberSetting(
     setting: Setting<unknown, number>,
     label: string,
-    range?: { min?: number; max?: number },
+    range: { min?: number; max?: number } = {},
 ): HTMLElement {
     const id = createRandomElementId();
-    const rangeMin = range?.min;
-    const rangeMax = range?.max;
+    const { min, max } = range;
     const input = el('input', {
         class: 'fullwidth',
         id,
-        attributes: { type: 'number', value: setting.serializeValue(setting.get()), min: rangeMin, max: rangeMax },
+        attributes: { type: 'number', value: setting.serializeValue(setting.get()), min, max },
     });
     input.addEventListener('change', () => {
         const value = parseFloat(input.value);
-        if (rangeMin != null && value < rangeMin) {
-            GLOBAL_MESSENGER.showErrorMessage(
-                `Value for option "${label}" is below minimum: ${value} (min: ${rangeMin})`,
-            );
+        if (min != null && value < min) {
+            GLOBAL_MESSENGER.showErrorMessage(`Value for option "${label}" is below minimum: ${value} (min: ${min})`);
         }
-        if (rangeMax != null && value > rangeMax) {
-            GLOBAL_MESSENGER.showErrorMessage(
-                `Value for option "${label}" is above maximum: ${value} (max: ${rangeMax})`,
-            );
+        if (max != null && value > max) {
+            GLOBAL_MESSENGER.showErrorMessage(`Value for option "${label}" is above maximum: ${value} (max: ${max})`);
         }
         setting.set(value);
     });

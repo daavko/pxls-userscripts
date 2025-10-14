@@ -36,23 +36,14 @@ export class Messenger {
 
 export const GLOBAL_MESSENGER = new Messenger('DPUS');
 
-function showMessage(message: string, type: MessageType, duration: number): void {
-    let messageDivTypeClass: string;
-    switch (type) {
-        case 'info':
-            messageDivTypeClass = 'dpus__message--info';
-            break;
-        case 'success':
-            messageDivTypeClass = 'dpus__message--success';
-            break;
-        case 'error':
-            messageDivTypeClass = 'dpus__message--error';
-            break;
-        default:
-            throw new Error(`Unknown message type: ${type as string}`);
-    }
+const messageDivTypeClasses: Record<MessageType, string> = {
+    info: 'dpus__message--info',
+    success: 'dpus__message--success',
+    error: 'dpus__message--error',
+};
 
-    const messageDiv = el('div', { class: ['dpus__message', messageDivTypeClass] }, [message]);
+function showMessage(message: string, type: MessageType, duration: number): void {
+    const messageDiv = el('div', { class: ['dpus__message', messageDivTypeClasses[type]] }, [message]);
 
     const messageContainer = getOrInitMessageContainer();
     messageContainer.appendChild(messageDiv);
@@ -62,16 +53,7 @@ function showMessage(message: string, type: MessageType, duration: number): void
 }
 
 function getOrInitMessageContainer(): Element {
-    if (MESSAGE_CONTAINER) {
-        return MESSAGE_CONTAINER;
-    }
-
-    const existingMessageContainer = document.querySelector('.dpus__message-container');
-    if (existingMessageContainer) {
-        MESSAGE_CONTAINER = existingMessageContainer;
-    } else {
-        MESSAGE_CONTAINER = createMessageContainer();
-    }
+    MESSAGE_CONTAINER ??= document.querySelector('.dpus__message-container') ?? createMessageContainer();
     return MESSAGE_CONTAINER;
 }
 

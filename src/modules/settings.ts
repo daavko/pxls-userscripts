@@ -116,7 +116,7 @@ export class Settings<const TSettings extends Record<string, Setting<unknown, un
     ) {
         this.init();
 
-        for (const [, setting] of Object.entries(this.settings)) {
+        for (const setting of Object.values(this.settings)) {
             setting.addCallback(() => {
                 this.saveStoredValue(this.collectSerializedSettings());
             });
@@ -127,16 +127,15 @@ export class Settings<const TSettings extends Record<string, Setting<unknown, un
                 return;
             }
 
-            const parsedNewValue = v.safeParse(Settings.schema, event.newValue);
-            if (!parsedNewValue.success) {
-                debug('Failed to parse settings from storage event', parsedNewValue.issues);
+            const parsedNewSettings = v.safeParse(Settings.schema, event.newValue);
+            if (!parsedNewSettings.success) {
+                debug('Failed to parse settings from storage event', parsedNewSettings.issues);
                 return;
             }
 
-            const newValue = { ...this.collectDefaultSerializedSettings(), ...parsedNewValue.output };
+            const newSettings = { ...this.collectDefaultSerializedSettings(), ...parsedNewSettings.output };
             for (const [key, setting] of Object.entries(this.settings)) {
-                const value = newValue[key];
-                setting.set(setting.parseValue(value));
+                setting.set(setting.parseValue(newSettings[key]));
             }
         });
     }
@@ -173,15 +172,13 @@ export class Settings<const TSettings extends Record<string, Setting<unknown, un
     }
 
     private init(): void {
-        const storedValue = this.loadStoredValue();
         const resolvedValue = {
             ...this.collectDefaultSerializedSettings(),
-            ...storedValue,
+            ...this.loadStoredValue(),
         };
         this.saveStoredValue(resolvedValue);
         for (const [key, setting] of Object.entries(this.settings)) {
-            const value = resolvedValue[key];
-            setting.init(value);
+            setting.init(resolvedValue[key]);
         }
     }
 
