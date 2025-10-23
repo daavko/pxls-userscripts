@@ -4,7 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## DPUS v1.6.1
+
 - Update grief tracker to a better rendering method that doesn't cause performance issues in Chrome
+- Internal cleanups
 
 ## DPUS v1.6.0
 
