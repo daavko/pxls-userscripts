@@ -17,10 +17,9 @@ import {
     waitForHeatmapLoaded,
     waitForVirginmapLoaded,
 } from '../modules/pxls-ui';
-import { BooleanSetting, NumberSetting, SettingBase, Settings, type SettingUpdateCallback } from '../modules/settings';
+import { BooleanSetting, SettingBase, Settings, type SettingUpdateCallback } from '../modules/settings';
 import {
     createBooleanSetting,
-    createNumberSetting,
     createSelectSetting,
     createSettingsButton,
     createSettingsResetButton,
@@ -35,24 +34,25 @@ import { PxlsUserscript } from './userscript';
 const griefDetectionModesSchema = v.picklist(['everything', 'nonVirginOnly', 'recentOnly', 'newOnly']);
 type GriefDetectionMode = InferOutput<typeof griefDetectionModesSchema>;
 
-const griefAnimationStyleSchema = v.picklist(['rgbwFlashThick', 'rgbwFlashThin']);
+const griefAnimationStyleSchema = v.picklist(['rgbwFlashVeryThick', 'rgbwFlashThick', 'rgbwFlashThin']);
 type GriefAnimationStyle = InferOutput<typeof griefAnimationStyleSchema>;
 
 const griefAnimationSpeedSchema = v.picklist(['verySlow', 'slow', 'fast']);
 type GriefAnimationSpeed = InferOutput<typeof griefAnimationSpeedSchema>;
 
-const GRIEF_ANIMATION_STYLE_CLASS_MAP: Record<GriefAnimationStyle, string> = {
-    rgbwFlashThick: 'dpus__grief-tracker--style-rgbw-flash-thick',
-    rgbwFlashThin: 'dpus__grief-tracker--style-rgbw-flash-thin',
+const GRIEF_ANIMATION_SPEED_MAP: Record<GriefAnimationSpeed, number> = {
+    verySlow: 2000,
+    slow: 1000,
+    fast: 500,
 };
 
-const GRIEF_ANIMATION_SPEED_CLASS_MAP: Record<GriefAnimationSpeed, string> = {
-    fast: 'dpus__grief-tracker--speed-fast',
-    slow: 'dpus__grief-tracker--speed-slow',
-    verySlow: 'dpus__grief-tracker--speed-very-slow',
+const GRIEF_STYLE_PIXEL_SIZE_MAP: Record<GriefAnimationStyle, number> = {
+    rgbwFlashVeryThick: 1,
+    rgbwFlashThick: 2,
+    rgbwFlashThin: 4,
 };
 
-const GRIEF_ANIMATION_NAMES = ['dpus__grief-tracker-grief__rgbw-flash'];
+const GRIEF_ANIMATION_COLORS = ['#ff0000', '#00ff00', '#0080ff', '#ffffff'];
 
 class GriefDetectionModeSetting extends SettingBase<GriefDetectionMode, string> {
     constructor(
@@ -93,34 +93,27 @@ class GriefAnimationSpeedSetting extends SettingBase<GriefAnimationSpeed, string
     }
 }
 
+interface GriefTrackerTemplateContext {
+    template: TemplateData;
+    detemplatizedImage: ImageData;
+    detemplatizedImageUint32View: Uint32Array;
+}
+
 export class GriefTrackerScript extends PxlsUserscript {
     private readonly messenger = new Messenger('Grief tracker');
 
     private readonly settings = Settings.create('griefTracker', {
         enabled: new BooleanSetting(true, [
             (_, newValue): void => {
-                this.griefListContainer.classList.toggle('dpus__grief-tracker--hidden', !newValue);
+                this.griefsCanvas.classList.toggle('dpus__grief-tracker--hidden', !newValue);
                 if (newValue) {
-                    if (this.detemplatizedTemplate) {
+                    if (this.templateContext) {
                         this.infoIcon.setState('templateActive');
                     } else {
                         this.infoIcon.setState('default');
                     }
                 } else {
                     this.infoIcon.setState('disabled');
-                }
-            },
-        ]),
-        maxGriefListSize: new NumberSetting(10_000, [
-            (_, newValue): void => {
-                if (newValue < 1) {
-                    this.messenger.showErrorMessage('Max grief list size must be at least 1');
-                    this.settings.maxGriefListSize.set(1);
-                } else if (newValue < this.griefList.size) {
-                    this.messenger.showErrorMessage(
-                        `Max grief list size is now ${newValue}, but there are already ${this.griefList.size} griefs in the list. Clearing the list.`,
-                    );
-                    this.clearGriefList();
                 }
             },
         ]),
@@ -133,28 +126,20 @@ export class GriefTrackerScript extends PxlsUserscript {
             },
         ]),
         animationStyle: new GriefAnimationStyleSetting('rgbwFlashThin', [
-            (oldValue, newValue): void => {
-                const oldClass = GRIEF_ANIMATION_STYLE_CLASS_MAP[oldValue];
-                const newClass = GRIEF_ANIMATION_STYLE_CLASS_MAP[newValue];
-                if (oldClass !== newClass) {
-                    this.griefListContainer.classList.remove(oldClass);
-                    this.griefListContainer.classList.add(newClass);
-                }
+            (): void => {
+                this.updateCachedGriefPixel();
+                this.collectExistingGriefs();
             },
         ]),
-        animationSpeed: new GriefAnimationSpeedSetting('slow', [
-            (oldValue, newValue): void => {
-                const oldClass = GRIEF_ANIMATION_SPEED_CLASS_MAP[oldValue];
-                const newClass = GRIEF_ANIMATION_SPEED_CLASS_MAP[newValue];
-                if (oldClass !== newClass) {
-                    this.griefListContainer.classList.remove(oldClass);
-                    this.griefListContainer.classList.add(newClass);
-                }
-            },
-        ]),
+        animationSpeed: new GriefAnimationSpeedSetting('slow'),
         showClearGriefsButton: new BooleanSetting(true, [
             (_, newValue): void => {
                 this.clearGriefsIcon.toggleHidden(!newValue);
+            },
+        ]),
+        renderUnderTemplate: new BooleanSetting(false, [
+            (_, newValue): void => {
+                this.griefsCanvas.classList.toggle('dpus__grief-tracker--under-template', newValue);
             },
         ]),
     });
@@ -163,11 +148,16 @@ export class GriefTrackerScript extends PxlsUserscript {
 
     private heatmapTimerId: number | null = null;
 
-    private detemplatizedTemplate: ImageData | null = null;
-    private detemplatizedTemplateUint32View: Uint32Array | null = null;
+    private templateContext: GriefTrackerTemplateContext | null = null;
 
-    private readonly griefListContainer = el('div', { class: 'dpus__grief-tracker' });
-    private readonly griefList = new Map<string, Element>();
+    private readonly griefPixel: OffscreenCanvas;
+    private readonly griefPixelCtx: OffscreenCanvasRenderingContext2D;
+    private readonly griefsCanvas = el('canvas', { class: 'dpus__grief-tracker' });
+    private readonly griefsCtx: CanvasRenderingContext2D;
+    private readonly griefedPixels = new Set<string>();
+
+    private lastRenderedHighlightColorIndex = 0;
+    private animationFrameRequestId: number | null = null;
 
     private readonly infoIcon = createInfoIcon('Grief Tracker', mdiMapMarkerAlertOutline, {
         clickable: true,
@@ -195,6 +185,21 @@ export class GriefTrackerScript extends PxlsUserscript {
             async (app) => this.initAfterApp(app),
         );
 
+        const griefsCtx = this.griefsCanvas.getContext('2d');
+        if (!griefsCtx) {
+            throw new Error('Failed to get griefs canvas context');
+        }
+        griefsCtx.clearRect(0, 0, this.griefsCanvas.width, this.griefsCanvas.height);
+        this.griefsCtx = griefsCtx;
+
+        this.griefPixel = new OffscreenCanvas(1, 1);
+        const griefPixelCtx = this.griefPixel.getContext('2d');
+        if (!griefPixelCtx) {
+            throw new Error('Failed to get grief pixel canvas context');
+        }
+        this.griefPixelCtx = griefPixelCtx;
+        this.updateCachedGriefPixel();
+
         this.infoIcon.element.addEventListener('click', (e) => {
             if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) {
                 return;
@@ -216,11 +221,18 @@ export class GriefTrackerScript extends PxlsUserscript {
         });
     }
 
+    private get griefPixelSize(): number {
+        return GRIEF_STYLE_PIXEL_SIZE_MAP[this.settings.animationStyle.get()];
+    }
+
+    private get griefPixelOverlaySize(): number {
+        return this.griefPixelSize + 2;
+    }
+
     private initSettings(): void {
         const { settings } = this;
         createSettingsUI('griefTracker', 'DPUS Grief Tracker', () => [
             createBooleanSetting(settings.enabled, 'Highlight griefs'),
-            createNumberSetting(settings.maxGriefListSize, 'Max grief list size', { min: 1 }),
             createSelectSetting(settings.detectionMode, 'Grief detection mode', [
                 { value: 'everything', label: 'Everything', title: 'Every incorrect pixel is highlighted' },
                 {
@@ -240,8 +252,9 @@ export class GriefTrackerScript extends PxlsUserscript {
                 },
             ]),
             createSelectSetting(settings.animationStyle, 'Animation style', [
-                { value: 'rgbwFlashThick', label: 'RGBW flash (thick)', title: 'Visible up to zoom 2' },
-                { value: 'rgbwFlashThin', label: 'RGBW flash (thin)', title: 'Visible up to zoom 1' },
+                { value: 'rgbwFlashVeryThick', label: 'RGBW flash (very thick)', title: 'Visible up to zoom 0.5' },
+                { value: 'rgbwFlashThick', label: 'RGBW flash (thick)', title: 'Visible up to zoom 1' },
+                { value: 'rgbwFlashThin', label: 'RGBW flash (thin)', title: 'Visible up to zoom 2' },
             ]),
             createSelectSetting(settings.animationSpeed, 'Animation speed', [
                 { value: 'verySlow', label: 'Very slow', title: '2 seconds per animation frame' },
@@ -249,6 +262,7 @@ export class GriefTrackerScript extends PxlsUserscript {
                 { value: 'fast', label: 'Fast', title: '500 milliseconds per animation frame' },
             ]),
             createBooleanSetting(settings.showClearGriefsButton, 'Show "Clear griefs" icon button'),
+            createBooleanSetting(settings.renderUnderTemplate, 'Render griefs under template'),
             createSettingsButton('Clear griefs', () => {
                 this.clearGriefList();
             }),
@@ -268,7 +282,7 @@ export class GriefTrackerScript extends PxlsUserscript {
         });
 
         window.addEventListener(PIXEL_PLACED_EVENT_NAME, ({ detail: { pixels } }) => {
-            if (!this.detemplatizedTemplate) {
+            if (!this.templateContext) {
                 return;
             }
 
@@ -281,40 +295,50 @@ export class GriefTrackerScript extends PxlsUserscript {
             if (template) {
                 this.templateChanged(template);
             } else {
-                if (this.detemplatizedTemplate) {
+                if (this.templateContext) {
                     this.clearTemplate();
                 }
             }
         });
     }
 
+    private updateCachedGriefPixel(): void {
+        const pixelSize = this.griefPixelOverlaySize;
+        this.griefPixel.width = pixelSize;
+        this.griefPixel.height = pixelSize;
+
+        const ctx = this.griefPixelCtx;
+        ctx.clearRect(0, 0, pixelSize, pixelSize);
+
+        ctx.fillStyle = GRIEF_ANIMATION_COLORS[this.lastRenderedHighlightColorIndex];
+        ctx.fillRect(0, 0, pixelSize, pixelSize);
+        ctx.clearRect(1, 1, pixelSize - 2, pixelSize - 2);
+    }
+
+    private updateGriefsCanvasSize(width: number, height: number): void {
+        const { width: oldWidth, height: oldHeight } = this.griefsCanvas;
+        this.griefsCtx.clearRect(0, 0, oldWidth, oldHeight);
+
+        const pixelSize = this.griefPixelSize;
+        this.griefsCanvas.width = width * pixelSize;
+        this.griefsCanvas.height = height * pixelSize;
+    }
+
     private coordToMapKey(x: number, y: number): string {
         return `${x},${y}`;
     }
 
-    private createGriefHighlightElement(x: number, y: number): HTMLElement {
-        return el('div', {
-            class: 'dpus__grief-tracker-grief',
-            styleCustomProperties: { '--dpus--grief-coord-x': `${x}`, '--dpus--grief-coord-y': `${y}` },
-        });
-    }
-
     private addGriefs(griefs: [number, number][]): void {
-        const availableGriefListSize = this.settings.maxGriefListSize.get() - this.griefList.size;
-
-        if (availableGriefListSize < griefs.length) {
-            this.showTooManyGriefsMessage();
-        }
-
-        const griefsToAdd = Math.min(griefs.length, availableGriefListSize);
-        for (const [x, y] of griefs.values().take(griefsToAdd)) {
-            this.addGriefUnchecked(x, y);
+        for (const [x, y] of griefs.values()) {
+            this.addGrief(x, y);
         }
     }
 
     private addGrief(x: number, y: number): void {
-        if (this.settings.maxGriefListSize.get() <= this.griefList.size) {
-            this.showTooManyGriefsMessage();
+        debug('New grief at', x, y);
+
+        const key = this.coordToMapKey(x, y);
+        if (this.griefedPixels.has(key)) {
             return;
         }
 
@@ -322,51 +346,46 @@ export class GriefTrackerScript extends PxlsUserscript {
     }
 
     private addGriefUnchecked(x: number, y: number): void {
-        debug('New grief at', x, y);
-
         const key = this.coordToMapKey(x, y);
-        if (this.griefList.has(key)) {
-            return;
-        }
-
-        const element = this.createGriefHighlightElement(x, y);
-        this.griefListContainer.appendChild(element);
-        element.addEventListener('animationstart', (e) => {
-            if (GRIEF_ANIMATION_NAMES.includes(e.animationName)) {
-                const animation = element
-                    .getAnimations()
-                    .find((a) => a instanceof CSSAnimation && a.animationName === e.animationName);
-                if (animation) {
-                    animation.startTime = 0;
-                }
-            }
-        });
-        this.griefList.set(key, element);
+        const pixelSize = this.griefPixelSize;
+        const pixelOverlaySize = this.griefPixelOverlaySize;
+        this.griefsCtx.drawImage(
+            this.griefPixel,
+            x * pixelSize - 1,
+            y * pixelSize - 1,
+            pixelOverlaySize,
+            pixelOverlaySize,
+        );
+        this.griefedPixels.add(key);
     }
 
     private removeGrief(x: number, y: number): void {
         const key = this.coordToMapKey(x, y);
-        const element = this.griefList.get(key);
-        if (element) {
-            debug('Removing grief at', x, y);
+        this.griefedPixels.delete(key);
 
-            this.griefListContainer.removeChild(element);
-            this.griefList.delete(key);
+        const pixelSize = this.griefPixelSize;
+        const pixelOverlaySize = this.griefPixelOverlaySize;
+        this.griefsCtx.clearRect(x * pixelSize - 1, y * pixelSize - 1, pixelOverlaySize, pixelOverlaySize);
+
+        // add back neighboring griefs to cover up any gaps
+        for (let offsetY = -1; offsetY <= 1; offsetY++) {
+            for (let offsetX = -1; offsetX <= 1; offsetX++) {
+                const neighborX = x + offsetX;
+                const neighborY = y + offsetY;
+                if (this.griefedPixels.has(this.coordToMapKey(neighborX, neighborY))) {
+                    this.addGriefUnchecked(neighborX, neighborY);
+                }
+            }
         }
     }
 
     private clearGriefList(): void {
-        this.griefList.clear();
-        this.griefListContainer.textContent = '';
+        this.griefedPixels.clear();
+        const { width, height } = this.griefsCanvas;
+        this.griefsCtx.clearRect(0, 0, width, height);
         if (this.heatmapTimerId != null) {
             window.clearTimeout(this.heatmapTimerId);
         }
-    }
-
-    private showTooManyGriefsMessage(): void {
-        this.messenger.showErrorMessage(
-            `Too many griefs detected. Showing only the first ${this.settings.maxGriefListSize.get()}.`,
-        );
     }
 
     private getCanvasMask(canvas: HTMLCanvasElement, x: number, y: number, width: number, height: number): ImageData {
@@ -379,10 +398,11 @@ export class GriefTrackerScript extends PxlsUserscript {
     }
 
     private collectExistingGriefs(): void {
-        const template = getCurrentTemplate();
-        if (!template || !this.detemplatizedTemplate || !this.detemplatizedTemplateUint32View) {
+        if (!this.templateContext) {
             return;
         }
+        const { template, detemplatizedImage, detemplatizedImageUint32View } = this.templateContext;
+        const { width: templateWidth, height: templateHeight } = detemplatizedImage;
 
         const board = getPxlsUIBoard();
         const boardCtx = board.getContext('2d');
@@ -394,12 +414,7 @@ export class GriefTrackerScript extends PxlsUserscript {
         const detectionMode = this.settings.detectionMode.get();
 
         const { x: templateX, y: templateY } = template;
-        const boardImageData = boardCtx.getImageData(
-            templateX,
-            templateY,
-            this.detemplatizedTemplate.width,
-            this.detemplatizedTemplate.height,
-        );
+        const boardImageData = boardCtx.getImageData(templateX, templateY, templateWidth, templateHeight);
         const boardImageDataUint32View = new Uint32Array(boardImageData.data.buffer);
 
         let canvasMask = null;
@@ -408,35 +423,34 @@ export class GriefTrackerScript extends PxlsUserscript {
                 getPxlsUIVirginmapBoard(),
                 templateX,
                 templateY,
-                this.detemplatizedTemplate.width,
-                this.detemplatizedTemplate.height,
+                templateWidth,
+                templateHeight,
             );
         } else if (detectionMode === 'recentOnly') {
             canvasMask = this.getCanvasMask(
                 getPxlsUIHeatmapBoard(),
                 templateX,
                 templateY,
-                this.detemplatizedTemplate.width,
-                this.detemplatizedTemplate.height,
+                templateWidth,
+                templateHeight,
             );
             if (this.heatmapTimerId != null) {
                 window.clearTimeout(this.heatmapTimerId);
             }
             this.heatmapTimerId = window.setTimeout(() => {
-                this.clearGriefList();
                 this.collectExistingGriefs();
             }, 60_000);
         }
 
         const debugTimer = debugTime('collectExistingGriefs');
         const griefs: [number, number][] = [];
-        for (let y = 0; y < this.detemplatizedTemplate.height; y++) {
-            const rowStart = y * this.detemplatizedTemplate.width;
-            for (let x = 0; x < this.detemplatizedTemplate.width; x++) {
+        for (let y = 0; y < templateHeight; y++) {
+            const rowStart = y * templateWidth;
+            for (let x = 0; x < templateWidth; x++) {
                 const pixelIndex = rowStart + x;
                 const pixelAlphaIndex = pixelIndex * 4 + 3;
 
-                const templateAlpha = this.detemplatizedTemplate.data[pixelAlphaIndex];
+                const templateAlpha = detemplatizedImage.data[pixelAlphaIndex];
                 if (templateAlpha === 0) {
                     // ignore pixels that aren't in the template
                     continue;
@@ -451,23 +465,25 @@ export class GriefTrackerScript extends PxlsUserscript {
                 }
 
                 const boardColor = boardImageDataUint32View[pixelIndex];
-                const templateColor = this.detemplatizedTemplateUint32View[pixelIndex];
+                const templateColor = detemplatizedImageUint32View[pixelIndex];
 
                 if (boardColor !== templateColor) {
                     // placed color is different from template color, this is a grief
-                    griefs.push([x + templateX, y + templateY]);
+                    griefs.push([x, y]);
                 }
             }
         }
         debugTimer?.stop();
+        this.clearGriefList();
+        this.updateGriefsCanvasSize(templateWidth, templateHeight);
         this.addGriefs(griefs);
     }
 
     private pixelPlaced(pixel: PlacedPixelData): void {
-        const template = getCurrentTemplate();
-        if (!template || !this.detemplatizedTemplate || !this.detemplatizedTemplateUint32View) {
+        if (!this.templateContext) {
             return;
         }
+        const { template, detemplatizedImage, detemplatizedImageUint32View } = this.templateContext;
 
         const placedColor = this.palette.at(pixel.color);
         if (placedColor == null) {
@@ -481,34 +497,36 @@ export class GriefTrackerScript extends PxlsUserscript {
         if (
             pixelTemplateX < 0 ||
             pixelTemplateY < 0 ||
-            pixelTemplateX >= this.detemplatizedTemplate.width ||
-            pixelTemplateY >= this.detemplatizedTemplate.height
+            pixelTemplateX >= detemplatizedImage.width ||
+            pixelTemplateY >= detemplatizedImage.height
         ) {
             // out of bounds
             return;
         }
 
-        const pixelIndex = pixelTemplateY * this.detemplatizedTemplate.width + pixelTemplateX;
-        const pixelAlpha = this.detemplatizedTemplate.data[pixelIndex * 4 + 3];
+        const pixelIndex = pixelTemplateY * detemplatizedImage.width + pixelTemplateX;
+        const pixelAlpha = detemplatizedImage.data[pixelIndex * 4 + 3];
 
         if (pixelAlpha === 0) {
             // pixel is transparent
             return;
         }
 
-        const pixelColor = this.detemplatizedTemplateUint32View[pixelIndex];
+        const pixelColor = detemplatizedImageUint32View[pixelIndex];
 
         if (pixelColor !== placedColor) {
             // placed color is different from template color, this is a grief
-            this.addGrief(pixel.x, pixel.y);
+            this.addGrief(pixelTemplateX, pixelTemplateY);
         } else {
-            this.removeGrief(pixel.x, pixel.y);
+            this.removeGrief(pixelTemplateX, pixelTemplateY);
         }
     }
 
     private clearTemplate(): void {
-        this.detemplatizedTemplate = null;
-        this.detemplatizedTemplateUint32View = null;
+        this.templateContext = null;
+        if (this.animationFrameRequestId != null) {
+            window.cancelAnimationFrame(this.animationFrameRequestId);
+        }
         this.clearGriefList();
         this.infoIcon.setState('default');
     }
@@ -524,9 +542,16 @@ export class GriefTrackerScript extends PxlsUserscript {
             })
             .then((detemplatizedImageData) => {
                 debug('Template image detemplatized');
-                this.detemplatizedTemplate = detemplatizedImageData;
-                this.detemplatizedTemplateUint32View = new Uint32Array(detemplatizedImageData.data.buffer);
+                this.templateContext = {
+                    template,
+                    detemplatizedImage: detemplatizedImageData,
+                    detemplatizedImageUint32View: new Uint32Array(detemplatizedImageData.data.buffer),
+                };
                 this.clearGriefList();
+                this.griefsCanvas.style.left = `${template.x}px`;
+                this.griefsCanvas.style.top = `${template.y}px`;
+                this.griefsCanvas.style.width = `${detemplatizedImageData.width}px`;
+                this.griefsCanvas.style.height = `${detemplatizedImageData.height}px`;
                 if (this.settings.detectionMode.get() !== 'newOnly') {
                     this.collectExistingGriefs();
                 }
@@ -535,6 +560,7 @@ export class GriefTrackerScript extends PxlsUserscript {
                 } else {
                     this.infoIcon.setState('disabled');
                 }
+                window.requestAnimationFrame(this.handleAnimationFrame);
             })
             .catch((error: unknown) => {
                 this.infoIcon.setState('error');
@@ -549,13 +575,40 @@ export class GriefTrackerScript extends PxlsUserscript {
             });
     }
 
+    private readonly handleAnimationFrame: FrameRequestCallback = (time): void => {
+        this.animationFrameRequestId = window.requestAnimationFrame(this.handleAnimationFrame);
+        if (!this.settings.enabled.get()) {
+            return;
+        }
+
+        const animationSpeed = this.settings.animationSpeed.get();
+        const animationInterval = GRIEF_ANIMATION_SPEED_MAP[animationSpeed];
+        const colorIndex = Math.floor(time / animationInterval) % GRIEF_ANIMATION_COLORS.length;
+        if (colorIndex === this.lastRenderedHighlightColorIndex) {
+            return;
+        }
+
+        this.lastRenderedHighlightColorIndex = colorIndex;
+        const highlightColor = GRIEF_ANIMATION_COLORS[colorIndex];
+
+        const { width, height } = this.griefsCanvas;
+        const { globalCompositeOperation, fillStyle } = this.griefsCtx;
+        this.griefsCtx.globalCompositeOperation = 'source-atop';
+        this.griefsCtx.fillStyle = highlightColor;
+        this.griefsCtx.fillRect(0, 0, width, height);
+        this.griefsCtx.globalCompositeOperation = globalCompositeOperation;
+        this.griefsCtx.fillStyle = fillStyle;
+
+        this.updateCachedGriefPixel();
+    };
+
     private initBeforeApp(): void {
         bindWebSocketProxy();
         addStylesheet('dpus__grief-tracker', griefTrackerStyles);
     }
 
     private async initAfterApp(app: PxlsApp): Promise<void> {
-        const { settings, griefListContainer, infoIcon, clearGriefsIcon } = this;
+        const { settings, griefsCanvas, infoIcon, clearGriefsIcon } = this;
 
         this.palette = await getFastLookupPalette();
 
@@ -574,12 +627,9 @@ export class GriefTrackerScript extends PxlsUserscript {
 
         this.initEventListeners();
         const boardContainer = getPxlsUIBoardContainer();
-        boardContainer.appendChild(griefListContainer);
-        const griefListContainerSpeedClass = GRIEF_ANIMATION_SPEED_CLASS_MAP[settings.animationSpeed.get()];
-        griefListContainer.classList.add(griefListContainerSpeedClass);
-        const griefListContainerStyleClass = GRIEF_ANIMATION_STYLE_CLASS_MAP[settings.animationStyle.get()];
-        griefListContainer.classList.add(griefListContainerStyleClass);
-        griefListContainer.classList.toggle('dpus__grief-tracker--hidden', !settings.enabled.get());
+        boardContainer.appendChild(griefsCanvas);
+        griefsCanvas.classList.toggle('dpus__grief-tracker--hidden', !settings.enabled.get());
+        griefsCanvas.classList.toggle('dpus__grief-tracker--under-template', settings.renderUnderTemplate.get());
 
         const template = getCurrentTemplate();
         if (template) {

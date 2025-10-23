@@ -4,61 +4,17 @@
     user-select: none;
     inset: 0;
     z-index: 4;
+
+    image-rendering: pixelated;
+    @supports (image-rendering: crisp-edges) {
+        image-rendering: crisp-edges;
+    }
+}
+
+.dpus__grief-tracker--under-template {
+    z-index: 2;
 }
 
 .dpus__grief-tracker--hidden {
     display: none;
-}
-
-.dpus__grief-tracker-grief {
-    position: absolute;
-    left: calc(var(--dpus--grief-coord-x) * 1px);
-    top: calc(var(--dpus--grief-coord-y) * 1px);
-    width: 1px;
-    height: 1px;
-    pointer-events: none;
-    user-select: none;
-
-    animation-iteration-count: infinite;
-}
-
-.dpus__grief-tracker--speed-fast .dpus__grief-tracker-grief {
-    animation-duration: 0.5s;
-}
-
-.dpus__grief-tracker--speed-slow .dpus__grief-tracker-grief {
-    animation-duration: 1s;
-}
-
-.dpus__grief-tracker--speed-very-slow .dpus__grief-tracker-grief {
-    animation-duration: 2s;
-}
-
-.dpus__grief-tracker--style-rgbw-flash-thick .dpus__grief-tracker-grief {
-    animation-name: dpus__grief-tracker-grief__rgbw-flash;
-    animation-timing-function: steps(1);
-
-    --dpus--grief--rgbw-flash-thickness: 0.55px;
-}
-
-.dpus__grief-tracker--style-rgbw-flash-thin .dpus__grief-tracker-grief {
-    animation-name: dpus__grief-tracker-grief__rgbw-flash;
-    animation-timing-function: steps(1);
-
-    --dpus--grief--rgbw-flash-thickness: 0.25px;
-}
-
-@keyframes dpus__grief-tracker-grief__rgbw-flash {
-    0% {
-        box-shadow: #ff0000 0 0 0 var(--dpus--grief--rgbw-flash-thickness);
-    }
-    25% {
-        box-shadow: #00ff00 0 0 0 var(--dpus--grief--rgbw-flash-thickness);
-    }
-    50% {
-        box-shadow: #0080ff 0 0 0 var(--dpus--grief--rgbw-flash-thickness);
-    }
-    75% {
-        box-shadow: white 0 0 0 var(--dpus--grief--rgbw-flash-thickness);
-    }
 }
