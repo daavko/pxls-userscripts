@@ -7,7 +7,11 @@
 }
 
 #main-bubble #setting-ui-bubble-compact {
-    background-color: transparent;
+    border: none !important;
+}
+
+#ui .bubble {
+    outline: none;
 }
 
 .dpus__template-info {
