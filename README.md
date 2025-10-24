@@ -49,8 +49,7 @@ The script is licensed under the GPLv3 license or any later version. You can fin
 
 ## How to build a script locally
 
-Run the `build.js` script with Node.js to build. The first argument is the path to the script you want to build. There's
-also the following options you can include:
+Run `npm run build`. There's also the following options you can include:
 
 - `--no-minify` - Don't minify the output script (useful for debugging)
 - `--sourcemap` - Generate a source map for the output script (useful for debugging)
