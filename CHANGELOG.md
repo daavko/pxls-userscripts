@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Fix highlight refreshing on very thick highlight setting leaving gaps when a grief is fixed
+
 ## DPUS v1.6.2
 
 - Update style changes for info bubble

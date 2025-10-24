@@ -368,8 +368,9 @@ export class GriefTrackerScript extends PxlsUserscript {
         this.griefsCtx.clearRect(x * pixelSize - 1, y * pixelSize - 1, pixelOverlaySize, pixelOverlaySize);
 
         // add back neighboring griefs to cover up any gaps
-        for (let offsetY = -1; offsetY <= 1; offsetY++) {
-            for (let offsetX = -1; offsetX <= 1; offsetX++) {
+        const refreshDistance = this.settings.animationStyle.get() === 'rgbwFlashVeryThick' ? 2 : 1;
+        for (let offsetY = -refreshDistance; offsetY <= refreshDistance; offsetY++) {
+            for (let offsetX = -refreshDistance; offsetX <= refreshDistance; offsetX++) {
                 const neighborX = x + offsetX;
                 const neighborY = y + offsetY;
                 if (this.griefedPixels.has(this.coordToMapKey(neighborX, neighborY))) {
