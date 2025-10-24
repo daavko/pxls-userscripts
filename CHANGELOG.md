@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Remove all allowlist functionality
+
 ## DPUS v1.6.3
 
 - Fix highlight refreshing on very thick highlight setting leaving gaps when a grief is fixed
