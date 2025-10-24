@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## DPUS v1.7.1
+
 - Fixed a bug that would cause Firefox to throw an error when template url changed
 
 ## DPUS v1.7.0
