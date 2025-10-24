@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## DPUS v1.7.0
+
 - Remove all allowlist functionality
 
 ## DPUS v1.6.3
