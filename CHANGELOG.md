@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Update style changes for info bubble
+
 ## DPUS v1.6.1
 
 - Update grief tracker to a better rendering method that doesn't cause performance issues in Chrome
