@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## DPUS v1.6.2
+
 - Update style changes for info bubble
 
 ## DPUS v1.6.1
