@@ -1,3 +1,4 @@
+import { waitForMacrotask } from '../util/browser';
 import { createWorker } from '../util/worker';
 import { type DetemplatizeMessage, isDetemplatizeResultMessage } from '../workers/detemplatization.schemas';
 import detemplatizeWorkerCode from '../workers/detemplatization.worker';
@@ -59,6 +60,11 @@ export async function getTemplateImage(): Promise<TemplateImage> {
     const debugTimer = debugTime('getTemplateImage');
 
     await img.decode();
+
+    // wait a macrotask to ensure the image is fully ready
+    // mostly needed for Firefox which seems to have issues with createImageBitmap immediately after decode,
+    // even though the spec says the image should be in a fully ready state after decode()
+    await waitForMacrotask();
 
     const imageBitmap = await createImageBitmap(img);
 
