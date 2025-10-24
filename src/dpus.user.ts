@@ -13,7 +13,6 @@ import {
     createSettingsUI,
     createSubheading,
 } from './modules/settings-ui';
-import { instanceUsesAllowlists, isUserInList } from './modules/userlist';
 import { AutoColorSelectorScript } from './scripts/auto-color-selector.user';
 import { AvailablePixelsFlasherScript } from './scripts/available-pixels-flasher.user';
 import { GriefTrackerScript } from './scripts/grief-tracker.user';
@@ -148,17 +147,6 @@ async function init(): Promise<void> {
     }
 
     const app = await waitForApp();
-
-    if (await instanceUsesAllowlists()) {
-        try {
-            if (!(await isUserInList(app.user.getUsername(), 'https://pxls.daavko.moe/userscripts/allowlist.json'))) {
-                messenger.showErrorMessage('You are not allowed to use this script.');
-                return;
-            }
-        } catch (e: unknown) {
-            debug('Failed to check if user is banned:', e);
-        }
-    }
 
     if (Reflect.has(window, 'dpus')) {
         messenger.showErrorMessage('Found old scripts, please remove them before using the unified Utility Scripts.');

@@ -19,8 +19,6 @@ import {
     createSubheading,
 } from '../modules/settings-ui';
 import { detemplatizeImage, getTemplateImage } from '../modules/template';
-import { instanceUsesAllowlists, isUserInList } from '../modules/userlist';
-import type { PxlsApp } from '../pxls/pxls-global';
 import { PxlsUserscript } from './userscript';
 
 const COORDS_REGEX = /^\(([0-9]+), ([0-9]+)\)$/;
@@ -68,29 +66,12 @@ export class AutoColorSelectorScript extends PxlsUserscript {
         ],
     });
 
-    private userAllowedToGrief = false;
-
     constructor() {
-        super('Template Color Autoselector', undefined, async (app) => this.initAfterApp(app));
+        super('Template Color Autoselector', undefined, async () => this.initAfterApp());
     }
 
-    private async initAfterApp(app: PxlsApp): Promise<void> {
+    private async initAfterApp(): Promise<void> {
         this.palette = await getFastLookupPalette();
-
-        if (await instanceUsesAllowlists()) {
-            try {
-                this.userAllowedToGrief = await isUserInList(
-                    app.user.getUsername(),
-                    'https://pxls.daavko.moe/userscripts/auto-color-selector-grief-whitelist.json',
-                );
-            } catch (e) {
-                debug('Failed to check if user is allowed to grief:', e);
-                this.userAllowedToGrief = false;
-            }
-        } else {
-            // let people do whatever they want
-            this.userAllowedToGrief = true;
-        }
 
         this.infoIcon.addToIconsContainer();
         this.initSettings();
@@ -133,17 +114,6 @@ export class AutoColorSelectorScript extends PxlsUserscript {
     }
 
     private initSettings(): void {
-        let griefSettingsUi: HTMLElement[] = [];
-        if (this.userAllowedToGrief) {
-            griefSettingsUi = [
-                createBooleanSetting(this.settings.griefMode, 'Enable grief mode'),
-                createStringSetting(this.settings.griefSeed, 'Grief seed'),
-                createSettingsButton('Random seed', () => {
-                    this.settings.griefSeed.set(randomGriefSeed());
-                }),
-            ];
-        }
-
         createSettingsUI('templateColorAutoselector', 'DPUS Template Color Autoselector', () => [
             createSubheading('Keybinds'),
             createKeyboardShortcutText('Z', 'Toggle auto-select color'),
@@ -154,7 +124,11 @@ export class AutoColorSelectorScript extends PxlsUserscript {
                 this.settings.selectColorWhenDeselectedInsideTemplate,
                 'Select color when deselected inside template',
             ),
-            ...griefSettingsUi,
+            createBooleanSetting(this.settings.griefMode, 'Enable grief mode'),
+            createStringSetting(this.settings.griefSeed, 'Grief seed'),
+            createSettingsButton('Random seed', () => {
+                this.settings.griefSeed.set(randomGriefSeed());
+            }),
             createSettingsResetButton(this.settings),
         ]);
     }
@@ -303,7 +277,7 @@ export class AutoColorSelectorScript extends PxlsUserscript {
             return;
         }
 
-        if (this.userAllowedToGrief && this.settings.griefMode.get() && this.settings.griefSeed.get() !== '') {
+        if (this.settings.griefMode.get() && this.settings.griefSeed.get() !== '') {
             // only colors that are *not* in the template
             const griefColorIndexes = this.palette
                 .map((_color, index) => index)
