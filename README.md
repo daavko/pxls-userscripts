@@ -14,6 +14,8 @@ encounter any issues, please create an issue on this GitHub repository or find m
 
 ## List of scripts
 
+The available scripts can be enabled or disabled at the bottom of Pxls settings after you have installed the userscript.
+
 ### Template color autoselector
 
 This script automatically selects the color of the pixel you are currently hovering over, based on the loaded template.
