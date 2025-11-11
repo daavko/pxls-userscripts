@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## DPUS v1.7.2
+
 - Fixed a bug that would cause keyboard events to not be captured when Caps Lock was on
 
 ## DPUS v1.7.1
