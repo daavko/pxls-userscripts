@@ -272,7 +272,7 @@ export class GriefTrackerScript extends PxlsUserscript {
 
     private initEventListeners(): void {
         document.body.addEventListener('keydown', (event) => {
-            if (event.key === 'y') {
+            if (event.key === 'y' || event.key === 'Y') {
                 if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
                     return;
                 }
