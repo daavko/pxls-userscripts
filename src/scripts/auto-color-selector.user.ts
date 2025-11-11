@@ -184,7 +184,7 @@ export class AutoColorSelectorScript extends PxlsUserscript {
                 return;
             }
 
-            if (event.key === 'z') {
+            if (event.key === 'z' || event.key === 'Z') {
                 if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
                     return;
                 }
