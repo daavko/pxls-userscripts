@@ -42,6 +42,10 @@ Shows basic template info in the info bubble.
 Flashes the entire screen when you gain available pixels. Fully configurable so you can make it as obnoxious or as
 subtle as you want.
 
+### Pogpega utils
+
+Utility features for the Pogpega bot, see script settings for details.
+
 ## License
 
 The script is licensed under the GPLv3 license or any later version. You can find the full license text in the
