@@ -27,6 +27,12 @@ export interface TemplateData {
     y: number;
 }
 
+export interface FullTemplateContext {
+    template: TemplateData;
+    detemplatizedImage: ImageData;
+    detemplatizedImageUint32View: Uint32Array;
+}
+
 type TemplateChangeData = NullableKeys<TemplateData>;
 
 const lastKnownTemplateData: TemplateChangeData = {

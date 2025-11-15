@@ -7,7 +7,12 @@ import { el } from '../modules/html';
 import { createInfoIcon } from '../modules/info-icon';
 import { Messenger } from '../modules/message';
 import { getFastLookupPalette } from '../modules/pxls-palette';
-import { getCurrentTemplate, TEMPLATE_CHANGE_EVENT_NAME, type TemplateData } from '../modules/pxls-template';
+import {
+    type FullTemplateContext,
+    getCurrentTemplate,
+    TEMPLATE_CHANGE_EVENT_NAME,
+    type TemplateData,
+} from '../modules/pxls-template';
 import {
     getPxlsUIBoard,
     getPxlsUIBoardContainer,
@@ -27,7 +32,6 @@ import {
 } from '../modules/settings-ui';
 import { detemplatizeImage, getTemplateImage } from '../modules/template';
 import { bindWebSocketProxy, PIXEL_PLACED_EVENT_NAME, type PlacedPixelData } from '../modules/websocket';
-import type { PxlsApp } from '../pxls/pxls-global';
 import griefTrackerStyles from './grief-tracker.user.css';
 import { PxlsUserscript } from './userscript';
 
@@ -93,13 +97,10 @@ class GriefAnimationSpeedSetting extends SettingBase<GriefAnimationSpeed, string
     }
 }
 
-interface GriefTrackerTemplateContext {
-    template: TemplateData;
-    detemplatizedImage: ImageData;
-    detemplatizedImageUint32View: Uint32Array;
-}
-
 export class GriefTrackerScript extends PxlsUserscript {
+    override readonly requiresVirginmap = true;
+    override readonly requiresHeatmap = true;
+
     private readonly messenger = new Messenger('Grief tracker');
 
     private readonly settings = Settings.create('griefTracker', {
@@ -148,7 +149,7 @@ export class GriefTrackerScript extends PxlsUserscript {
 
     private heatmapTimerId: number | null = null;
 
-    private templateContext: GriefTrackerTemplateContext | null = null;
+    private templateContext: FullTemplateContext | null = null;
 
     private readonly griefPixel: OffscreenCanvas;
     private readonly griefPixelCtx: OffscreenCanvasRenderingContext2D;
@@ -182,7 +183,7 @@ export class GriefTrackerScript extends PxlsUserscript {
             () => {
                 this.initBeforeApp();
             },
-            async (app) => this.initAfterApp(app),
+            async () => this.initAfterApp(),
         );
 
         const griefsCtx = this.griefsCanvas.getContext('2d');
@@ -608,7 +609,7 @@ export class GriefTrackerScript extends PxlsUserscript {
         addStylesheet('dpus__grief-tracker', griefTrackerStyles);
     }
 
-    private async initAfterApp(app: PxlsApp): Promise<void> {
+    private async initAfterApp(): Promise<void> {
         const { settings, griefsCanvas, infoIcon, clearGriefsIcon } = this;
 
         this.palette = await getFastLookupPalette();
@@ -620,10 +621,7 @@ export class GriefTrackerScript extends PxlsUserscript {
         clearGriefsIcon.toggleHidden(!settings.showClearGriefsButton.get());
 
         infoIcon.setState('loadingBoard');
-        await waitForBoardLoaded();
-        app.overlays.virginmap.reload();
-        app.overlays.heatmap.reload();
-        await Promise.all([waitForVirginmapLoaded(), waitForHeatmapLoaded()]);
+        await Promise.all([waitForBoardLoaded(), waitForVirginmapLoaded(), waitForHeatmapLoaded()]);
         infoIcon.setState('default');
 
         this.initEventListeners();

@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## DPUS v1.8.0
+
+- Add script that allows you to copy correct pixels to the clipboard
+- Internal optimization to not cause more than one heatmap/virginmap reload when multiple scripts request it
+
 ## DPUS v1.7.2
 
 - Fixed a bug that would cause keyboard events to not be captured when Caps Lock was on

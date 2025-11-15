@@ -13,11 +13,12 @@ import {
 } from '../modules/pxls-ui';
 import { detemplatizeImage, getTemplateImage } from '../modules/template';
 import { bindWebSocketProxy, PIXEL_PLACED_EVENT_NAME, type PlacedPixelData } from '../modules/websocket';
-import type { PxlsApp } from '../pxls/pxls-global';
 import templateInfoStyles from './template-info.user.css';
 import { PxlsUserscript } from './userscript';
 
 export class TemplateInfoScript extends PxlsUserscript {
+    override readonly requiresVirginmap = true;
+
     private readonly messenger = new Messenger('Template info');
 
     private palette: number[] = [];
@@ -73,7 +74,7 @@ export class TemplateInfoScript extends PxlsUserscript {
             () => {
                 this.initBeforeApp();
             },
-            async (app) => this.initAfterApp(app),
+            async () => this.initAfterApp(),
         );
     }
 
@@ -290,12 +291,10 @@ export class TemplateInfoScript extends PxlsUserscript {
         addStylesheet('dpus__template-info', templateInfoStyles);
     }
 
-    private async initAfterApp(app: PxlsApp): Promise<void> {
+    private async initAfterApp(): Promise<void> {
         this.palette = await getFastLookupPalette();
 
-        await waitForBoardLoaded();
-        app.overlays.virginmap.reload();
-        await waitForVirginmapLoaded();
+        await Promise.all([waitForBoardLoaded(), waitForVirginmapLoaded()]);
 
         debug('Initializing script');
 
