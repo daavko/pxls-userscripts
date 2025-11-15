@@ -17,6 +17,7 @@ import { AutoColorSelectorScript } from './scripts/auto-color-selector.user';
 import { AvailablePixelsFlasherScript } from './scripts/available-pixels-flasher.user';
 import { GriefTrackerScript } from './scripts/grief-tracker.user';
 import { MilestoneWatcherScript } from './scripts/milestone-watcher.user';
+import { PogpegaUtils } from './scripts/pogpega-utils.user';
 import { TemplateInfoScript } from './scripts/template-info.user';
 import type { PxlsUserscript } from './scripts/userscript';
 import bubbleUnstupidifierStyles from './styles/bubble-unstupidifier.css';
@@ -30,6 +31,7 @@ const settings = Settings.create('global', {
     griefTrackerScriptEnabled: new BooleanSetting(false),
     milestoneWatcherScriptEnabled: new BooleanSetting(false),
     availablePixelsFlasherEnabled: new BooleanSetting(false),
+    pogpegaUtilsEnabled: new BooleanSetting(false),
 
     bubbleUnstupidifierStyleEnabled: new BooleanSetting(false, [
         createStyleSettingChangeHandler('dpus__global__bubble-unstupidifier'),
@@ -56,6 +58,7 @@ function initSettings(): void {
         createBooleanSetting(settings.griefTrackerScriptEnabled, 'Grief Tracker'),
         createBooleanSetting(settings.milestoneWatcherScriptEnabled, 'Milestone Watcher'),
         createBooleanSetting(settings.availablePixelsFlasherEnabled, 'Available Pixels Flasher'),
+        createBooleanSetting(settings.pogpegaUtilsEnabled, 'Pogpega Utils'),
         createLineBreak(),
         createSubheading('Styles'),
         createSettingsText('Those are just styles I prefer. Reload is not required for changes to take effect.'),
@@ -110,6 +113,9 @@ async function init(): Promise<void> {
     if (settings.availablePixelsFlasherEnabled.get()) {
         scripts.push(new AvailablePixelsFlasherScript());
     }
+    if (settings.pogpegaUtilsEnabled.get()) {
+        scripts.push(new PogpegaUtils());
+    }
 
     if (scripts.length > 0) {
         setDpusHasBeenLaunchedBefore();
@@ -157,6 +163,16 @@ async function init(): Promise<void> {
     initTemplateEventHandlers();
 
     initSettings();
+
+    const anyScriptRequiresVirginmap = scripts.some((s) => s.requiresVirginmap);
+    if (anyScriptRequiresVirginmap) {
+        app.overlays.virginmap.reload();
+    }
+
+    const anyScriptRequiresHeatmap = scripts.some((s) => s.requiresHeatmap);
+    if (anyScriptRequiresHeatmap) {
+        app.overlays.heatmap.reload();
+    }
 
     for (const script of scripts) {
         if (failedScripts.has(script.name)) {
