@@ -10,7 +10,6 @@ import {
     getPxlsUIBoard,
     getPxlsUIVirginmapBoard,
     waitForBoardLoaded,
-    waitForHeatmapLoaded,
     waitForVirginmapLoaded,
 } from '../modules/pxls-ui';
 import { createSettingsButton, createSettingsUI } from '../modules/settings-ui';
@@ -186,7 +185,7 @@ export class PogpegaUtils extends PxlsUserscript {
     private async initAfterApp(): Promise<void> {
         this.initSettings();
 
-        await Promise.all([waitForBoardLoaded(), waitForVirginmapLoaded(), waitForHeatmapLoaded()]);
+        await Promise.all([waitForBoardLoaded(), waitForVirginmapLoaded()]);
 
         this.initEventListeners();
 
