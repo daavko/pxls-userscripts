@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## DPUS v1.8.1
+
 - Fixed a bug that would cause the pogpega utils script to wait for heatmap to be loaded, even though it doesn't use the heatmap
 
 ## DPUS v1.8.0
