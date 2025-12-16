@@ -6,7 +6,7 @@
     "private": true,
     "sideEffects": false,
     "scripts": {
-        "lint": "eslint ./src",
+        "lint": "eslint --max-warnings 0 ./src",
         "format": "prettier --write .",
         "check-format": "prettier --check .",
         "typecheck": "tsc --noEmit",
