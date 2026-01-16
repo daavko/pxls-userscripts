@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## DPUS v1.9.1
+
 - Template refresher script no longer reloads the template if the template host is a known CDN that serves static content
 
 ## DPUS v1.9.0
