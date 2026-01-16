@@ -46,6 +46,10 @@ subtle as you want.
 
 Utility features for the Pogpega bot, see script settings for details.
 
+### Template Refresher
+
+Automatically refreshes the template at a configurable interval.
+
 ## License
 
 The script is licensed under the GPLv3 license or any later version. You can find the full license text in the
