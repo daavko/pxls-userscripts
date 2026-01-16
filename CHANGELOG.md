@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Template refresher script no longer reloads the template if the template host is a known CDN that serves static content
+
 ## DPUS v1.9.0
 
 - Add script that automatically refreshes the template on a configurable interval

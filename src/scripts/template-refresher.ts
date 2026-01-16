@@ -10,6 +10,8 @@ import {
 } from '../modules/settings-ui';
 import { PxlsUserscript } from './userscript';
 
+const KNOWN_STATIC_HOSTS = ['clueless-r2.pxls.space'];
+
 export class TemplateRefresher extends PxlsUserscript {
     private readonly settings = Settings.create('templateRefresher', {
         enabled: new BooleanSetting(true, [
@@ -72,10 +74,23 @@ export class TemplateRefresher extends PxlsUserscript {
             return;
         }
 
-        const app = getApp();
         const templateUrl = getPxlsUITemplateUrlInput().value;
+        if (templateUrl.length === 0) {
+            return;
+        }
+
+        try {
+            const url = new URL(templateUrl);
+            if (KNOWN_STATIC_HOSTS.includes(url.hostname)) {
+                return;
+            }
+        } catch {
+            return;
+        }
+
         const { x, y, width } = template;
 
+        const app = getApp();
         app.updateTemplate({ url: '' });
         setTimeout(() => {
             app.updateTemplate({ url: templateUrl, x, y, width, use: true });
