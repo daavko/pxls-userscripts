@@ -6,6 +6,7 @@ let PXLS_UI_TEMPLATE_IMAGE: HTMLImageElement | null = null;
 let PXLS_UI_MOUSE_COORDS: HTMLElement | null = null;
 let PXLS_UI_PALETTE_DESELECT_BUTTON: HTMLElement | null = null;
 let PXLS_UI_PALETTE_SELECTION_BUTTONS: HTMLElement[] | null = null;
+let PXLS_UI_TEMPLATE_URL_INPUT: HTMLInputElement | null = null;
 let PXLS_UI_TEMPLATE_WIDTH_INPUT: HTMLInputElement | null = null;
 let PXLS_UI_TEMPLATE_X_INPUT: HTMLInputElement | null = null;
 let PXLS_UI_TEMPLATE_Y_INPUT: HTMLInputElement | null = null;
@@ -51,6 +52,10 @@ export function getPxlsUIPaletteDeselectButton(): HTMLElement {
 
 export function getPxlsUIPaletteSelectionButtons(): HTMLElement[] {
     return getPxlsUIElement(() => PXLS_UI_PALETTE_SELECTION_BUTTONS, 'PXLS_UI_PALETTE_SELECTION_BUTTONS');
+}
+
+export function getPxlsUITemplateUrlInput(): HTMLInputElement {
+    return getPxlsUIElement(() => PXLS_UI_TEMPLATE_URL_INPUT, 'PXLS_UI_TEMPLATE_URL_INPUT');
 }
 
 export function getPxlsUITemplateWidthInput(): HTMLInputElement {
@@ -120,6 +125,11 @@ export function findUIElements(): void {
         throw new Error('Failed to find palette buttons, this should never happen');
     } else {
         PXLS_UI_PALETTE_SELECTION_BUTTONS = Array.from(paletteButtons);
+    }
+
+    PXLS_UI_TEMPLATE_URL_INPUT = document.querySelector('input#template-url');
+    if (!PXLS_UI_TEMPLATE_URL_INPUT) {
+        throw new Error('Failed to find template URL input, this should never happen');
     }
 
     PXLS_UI_TEMPLATE_WIDTH_INPUT = document.querySelector('input#template-width');

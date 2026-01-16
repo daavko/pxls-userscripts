@@ -234,7 +234,7 @@ declare interface PxlsApp {
 
     centerBoardOn(x: number, y: number): void;
 
-    updateTemplate(): void;
+    updateTemplate(templateObj: Partial<PxlsAppTemplateObject & { use: boolean }>): void;
 
     alert(message: string): void;
 

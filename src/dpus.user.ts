@@ -19,6 +19,7 @@ import { GriefTrackerScript } from './scripts/grief-tracker.user';
 import { MilestoneWatcherScript } from './scripts/milestone-watcher.user';
 import { PogpegaUtils } from './scripts/pogpega-utils.user';
 import { TemplateInfoScript } from './scripts/template-info.user';
+import { TemplateRefresher } from './scripts/template-refresher';
 import type { PxlsUserscript } from './scripts/userscript';
 import bubbleUnstupidifierStyles from './styles/bubble-unstupidifier.css';
 import noMoveTemplateHereStyles from './styles/no-move-template-here.css';
@@ -32,6 +33,7 @@ const settings = Settings.create('global', {
     milestoneWatcherScriptEnabled: new BooleanSetting(false),
     availablePixelsFlasherEnabled: new BooleanSetting(false),
     pogpegaUtilsEnabled: new BooleanSetting(false),
+    templateRefresherEnabled: new BooleanSetting(false),
 
     bubbleUnstupidifierStyleEnabled: new BooleanSetting(false, [
         createStyleSettingChangeHandler('dpus__global__bubble-unstupidifier'),
@@ -59,6 +61,7 @@ function initSettings(): void {
         createBooleanSetting(settings.milestoneWatcherScriptEnabled, 'Milestone Watcher'),
         createBooleanSetting(settings.availablePixelsFlasherEnabled, 'Available Pixels Flasher'),
         createBooleanSetting(settings.pogpegaUtilsEnabled, 'Pogpega Utils'),
+        createBooleanSetting(settings.templateRefresherEnabled, 'Template Refresher'),
         createLineBreak(),
         createSubheading('Styles'),
         createSettingsText('Those are just styles I prefer. Reload is not required for changes to take effect.'),
@@ -115,6 +118,9 @@ async function init(): Promise<void> {
     }
     if (settings.pogpegaUtilsEnabled.get()) {
         scripts.push(new PogpegaUtils());
+    }
+    if (settings.templateRefresherEnabled.get()) {
+        scripts.push(new TemplateRefresher());
     }
 
     if (scripts.length > 0) {

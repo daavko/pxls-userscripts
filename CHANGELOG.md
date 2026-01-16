@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Add script that automatically refreshes the template on a configurable interval
+
 ## DPUS v1.8.1
 
 - Fixed a bug that would cause the pogpega utils script to wait for heatmap to be loaded, even though it doesn't use the heatmap
