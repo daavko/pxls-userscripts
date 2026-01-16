@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## DPUS v1.9.0
+
 - Add script that automatically refreshes the template on a configurable interval
 
 ## DPUS v1.8.1
