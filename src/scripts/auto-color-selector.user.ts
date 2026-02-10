@@ -21,7 +21,7 @@ import {
 import { detemplatizeImage, getTemplateImage } from '../modules/template';
 import { PxlsUserscript } from './userscript';
 
-const COORDS_REGEX = /^\(([0-9]+), ([0-9]+)\)$/;
+const COORDS_REGEX = /^\((-?[0-9]+), (-?[0-9]+)\)$/;
 
 function randomGriefSeed(): string {
     return window.crypto.randomUUID().replaceAll('-', '');

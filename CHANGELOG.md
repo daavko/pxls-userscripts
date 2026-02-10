@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Fix bug where negative coordinates would cause a repeated "Failed to parse coords text" error
+
 ## DPUS v1.9.1
 
 - Template refresher script no longer reloads the template if the template host is a known CDN that serves static content
