@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Fix a bug with object-based settings where multiple open tabs would overwrite each other's settings due to equality checks
+
 ## DPUS v1.9.2
 
 - Fix bug where negative coordinates would cause a repeated "Failed to parse coords text" error

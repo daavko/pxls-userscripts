@@ -29,6 +29,23 @@ class MilestoneSetting extends SettingBase<number[], string> {
     override serializeValue(value: number[]): string {
         return value.join(',');
     }
+
+    override valuesEqual(value1: number[], value2: number[]): boolean {
+        if (value1.length !== value2.length) {
+            return false;
+        }
+
+        const sorted1 = [...value1].sort((a, b) => a - b);
+        const sorted2 = [...value2].sort((a, b) => a - b);
+
+        for (let i = 0; i < sorted1.length; i++) {
+            if (sorted1[i] !== sorted2[i]) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
 
 export class MilestoneWatcherScript extends PxlsUserscript {

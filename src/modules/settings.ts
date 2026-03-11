@@ -47,7 +47,7 @@ export abstract class SettingBase<TValue, TSerializedValue = TValue> implements 
 
     set(value: TValue): void {
         const oldValue = this.currentValue;
-        if (oldValue === value) {
+        if (this.valuesEqual(oldValue, value)) {
             return;
         }
         this.currentValue = value;
@@ -82,6 +82,10 @@ export abstract class SettingBase<TValue, TSerializedValue = TValue> implements 
         for (const callback of this.valueUpdateCallbacks) {
             callback(oldValue, newValue);
         }
+    }
+
+    protected valuesEqual(value1: TValue, value2: TValue): boolean {
+        return value1 === value2;
     }
 }
 

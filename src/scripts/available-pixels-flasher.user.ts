@@ -38,6 +38,22 @@ class FlashKeyframesSetting extends SettingBase<FlashKeyframes, string> {
     override serializeValue(value: FlashKeyframes): string {
         return value.map(([color, time]) => `${color},${time}`).join(' ');
     }
+
+    override valuesEqual(value1: FlashKeyframes, value2: FlashKeyframes): boolean {
+        if (value1.length !== value2.length) {
+            return false;
+        }
+
+        for (let i = 0; i < value1.length; i++) {
+            const [color1, time1] = value1[i];
+            const [color2, time2] = value2[i];
+            if (color1 !== color2 || time1 !== time2) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
 
 export class AvailablePixelsFlasherScript extends PxlsUserscript {
