@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 - Fix a bug with object-based settings where multiple open tabs would overwrite each other's settings due to equality checks
+- Fix grief tracker internal canvas not getting its size set in "new only" mode
 
 ## DPUS v1.9.2
 

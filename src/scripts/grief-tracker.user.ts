@@ -556,6 +556,8 @@ export class GriefTrackerScript extends PxlsUserscript {
                 this.griefsCanvas.style.height = `${detemplatizedImageData.height}px`;
                 if (this.settings.detectionMode.get() !== 'newOnly') {
                     this.collectExistingGriefs();
+                } else {
+                    this.updateGriefsCanvasSize(detemplatizedImageData.width, detemplatizedImageData.height);
                 }
                 if (this.settings.enabled.get()) {
                     this.infoIcon.setState('templateActive');
