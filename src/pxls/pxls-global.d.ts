@@ -320,12 +320,16 @@ declare interface PxlsAppStorage {
 
 declare type PxlsAppSettingType = boolean | number | string;
 
+type PxlsAppSettingGetterType<SettingType extends PxlsAppSettingType> = SettingType extends number
+    ? number | string
+    : SettingType;
+
 declare interface PxlsAppSetting<SettingType extends PxlsAppSettingType> {
-    get(): SettingType;
+    get(): PxlsAppSettingGetterType<SettingType>;
     set(value: SettingType): void;
     reset(): void;
-    listen(fn: () => void): void;
-    unlisten(fn: () => void): void;
+    listen(fn: (value: PxlsAppSettingGetterType<SettingType>) => void): void;
+    unlisten(fn: (value: PxlsAppSettingGetterType<SettingType>) => void): void;
     // eslint-disable-next-line @typescript-eslint/member-ordering -- foreign code
     controls: {
         add(): void;

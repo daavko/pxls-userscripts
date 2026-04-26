@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Make the flasher script respect the global pixel notification offset
+
 ## DPUS v1.9.3
 
 - Fix a bug with object-based settings where multiple open tabs would overwrite each other's settings due to equality checks

@@ -3,7 +3,7 @@ import * as v from 'valibot';
 import { addStylesheet } from '../modules/document';
 import { el } from '../modules/html';
 import { Messenger } from '../modules/message';
-import { getPxlsUIPlaceableCount } from '../modules/pxls-ui';
+import { getPxlsUICooldownTimer, getPxlsUIPlaceableCount } from '../modules/pxls-ui';
 import { BooleanSetting, SettingBase, Settings, type SettingUpdateCallback } from '../modules/settings';
 import { createBooleanSetting, createLineBreak, createSettingsUI, createStringSetting } from '../modules/settings-ui';
 import availablePixelsFlasherStyles from './available-pixels-flasher.user.css';
@@ -76,8 +76,12 @@ export class AvailablePixelsFlasherScript extends PxlsUserscript {
     private runningAnimation?: Animation;
 
     private lastKnownStackCount?: number;
+    private lastKnownCooldownOffset = 0;
     private readonly stackCountObserver = new MutationObserver(() => {
         this.processStackCountChanges();
+    });
+    private readonly cooldownObserver = new MutationObserver(() => {
+        this.processCooldownChanges();
     });
 
     constructor() {
@@ -86,15 +90,31 @@ export class AvailablePixelsFlasherScript extends PxlsUserscript {
             () => {
                 addStylesheet('dpus__available-pixels-flasher', availablePixelsFlasherStyles);
             },
-            () => {
+            (app) => {
                 this.initSettings();
                 this.initEventListeners();
                 document.body.appendChild(this.flashOverlay);
                 this.processStackCountChanges();
+
                 const stackCountElement = getPxlsUIPlaceableCount();
                 this.stackCountObserver.observe(stackCountElement, {
                     childList: true,
                     characterData: true,
+                });
+
+                const cooldownTimerElement = getPxlsUICooldownTimer();
+                this.cooldownObserver.observe(cooldownTimerElement, {
+                    childList: true,
+                    characterData: true,
+                });
+
+                app.settings.place.alert.delay.listen((value) => {
+                    // just pxls things
+                    const valueNumber = Number.parseInt(value.toString(), 10);
+                    if (Number.isNaN(valueNumber)) {
+                        return;
+                    }
+                    this.lastKnownCooldownOffset = Math.min(valueNumber, 0);
                 });
             },
         );
@@ -143,13 +163,43 @@ export class AvailablePixelsFlasherScript extends PxlsUserscript {
         }
 
         if (stackCount > this.lastKnownStackCount) {
-            if (stackCount === 1) {
+            if (stackCount === 1 && this.lastKnownCooldownOffset === 0) {
                 this.runFlash();
             } else if (stackCount > 1 && this.settings.flashOnStackGain.get()) {
                 this.runFlash();
             }
         }
         this.lastKnownStackCount = stackCount;
+    }
+
+    private processCooldownChanges(): void {
+        if (this.lastKnownCooldownOffset === 0) {
+            return;
+        }
+
+        const cooldownTimerElement = getPxlsUICooldownTimer();
+        const cooldownText = cooldownTimerElement.textContent.split(':');
+
+        const minutes = cooldownText.at(0);
+        const seconds = cooldownText.at(1);
+
+        if (minutes == null || seconds == null) {
+            return;
+        }
+
+        // this would theoretically break for offsets longer than a minute, but nobody should be using that anyway
+        if (minutes !== '00') {
+            return;
+        }
+
+        const secondsNumber = Number.parseInt(seconds, 10);
+        if (Number.isNaN(secondsNumber)) {
+            return;
+        }
+
+        if (secondsNumber === -this.lastKnownCooldownOffset) {
+            this.runFlash();
+        }
     }
 
     private createAnimationKeyframes(): Keyframe[] {

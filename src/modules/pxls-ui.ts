@@ -13,6 +13,7 @@ let PXLS_UI_TEMPLATE_Y_INPUT: HTMLInputElement | null = null;
 let PXLS_UI_TOP_UI: HTMLElement | null = null;
 let PXLS_UI_MAIN_BUBBLE: HTMLElement | null = null;
 let PXLS_UI_PLACEABLE_COUNT: HTMLElement | null = null;
+let PXLS_UI_COOLDOWN_TIMER: HTMLElement | null = null;
 
 function getPxlsUIElement<T extends Element | Element[]>(getter: () => T | null, name: string): T {
     const element = getter();
@@ -80,6 +81,10 @@ export function getPxlsUIMainBubble(): HTMLElement {
 
 export function getPxlsUIPlaceableCount(): HTMLElement {
     return getPxlsUIElement(() => PXLS_UI_PLACEABLE_COUNT, 'PXLS_UI_PLACEABLE_COUNT');
+}
+
+export function getPxlsUICooldownTimer(): HTMLElement {
+    return getPxlsUIElement(() => PXLS_UI_COOLDOWN_TIMER, 'PXLS_UI_COOLDOWN_TIMER');
 }
 
 export function findUIElements(): void {
@@ -160,6 +165,11 @@ export function findUIElements(): void {
     PXLS_UI_PLACEABLE_COUNT = document.querySelector('#placeable-count');
     if (!PXLS_UI_PLACEABLE_COUNT) {
         throw new Error('Failed to find placeable count, this should never happen');
+    }
+
+    PXLS_UI_COOLDOWN_TIMER = document.querySelector('#cooldown-timer');
+    if (!PXLS_UI_COOLDOWN_TIMER) {
+        throw new Error('Failed to find cooldown timer, this should never happen');
     }
 }
 
