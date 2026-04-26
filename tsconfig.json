@@ -16,7 +16,8 @@
         "outDir": "dist",
         "composite": true,
         "incremental": true,
-        "tsBuildInfoFile": ".ts/.tsbuildinfo"
+        "tsBuildInfoFile": ".ts/.tsbuildinfo",
+        "types": ["jquery"]
     },
     "include": ["src"]
 }

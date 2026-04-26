@@ -34,8 +34,7 @@ export function bindWebSocketProxy(): void {
     debug('Binding WebSocket proxy');
     verifyWebSocketPrototype(window.WebSocket);
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- safe, we're doing advanced stuff that can't really be type-checked
-    window.WebSocket = WebSocketProxy as unknown as typeof window.WebSocket;
+    window.WebSocket = WebSocketProxy;
     SOCKET_PROTOTYPE_REPLACED = true;
 }
 
