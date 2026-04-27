@@ -61,6 +61,7 @@ export class AvailablePixelsFlasherScript extends PxlsUserscript {
 
     private readonly settings = Settings.create('flashOnAvailablePixels', {
         flashEnabled: new BooleanSetting(true),
+        syncToCooldownOffset: new BooleanSetting(true),
         flashKeyframes: new FlashKeyframesSetting([
             ['#FFFFFF', 250],
             ['#000000', 250],
@@ -124,6 +125,10 @@ export class AvailablePixelsFlasherScript extends PxlsUserscript {
         const { settings } = this;
         createSettingsUI('flashOnAvailablePixels', 'Flash on available pixels', () => [
             createBooleanSetting(settings.flashEnabled, 'Enable flash on new available pixels'),
+            createBooleanSetting(settings.syncToCooldownOffset, 'Sync flash to audio notification'),
+            el('p', [
+                'When enabled, this will cause the flash to trigger when the cooldown timer reaches the offset set in "Alert delay" in the main settings.',
+            ]),
             createBooleanSetting(settings.flashOnStackGain, 'Flash when stack increases above 1'),
             createLineBreak(),
             createStringSetting(settings.flashKeyframes, 'Flash keyframes'),
@@ -163,7 +168,7 @@ export class AvailablePixelsFlasherScript extends PxlsUserscript {
         }
 
         if (stackCount > this.lastKnownStackCount) {
-            if (stackCount === 1 && this.lastKnownCooldownOffset === 0) {
+            if (stackCount === 1 && (this.lastKnownCooldownOffset === 0 || !this.settings.syncToCooldownOffset.get())) {
                 this.runFlash();
             } else if (stackCount > 1 && this.settings.flashOnStackGain.get()) {
                 this.runFlash();
@@ -173,7 +178,7 @@ export class AvailablePixelsFlasherScript extends PxlsUserscript {
     }
 
     private processCooldownChanges(): void {
-        if (this.lastKnownCooldownOffset === 0) {
+        if (this.lastKnownCooldownOffset === 0 || !this.settings.syncToCooldownOffset.get()) {
             return;
         }
 

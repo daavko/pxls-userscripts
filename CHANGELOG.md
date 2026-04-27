@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Add a setting that allows you to un-sync the flasher from the global pixel notification offset
+
 ## DPUS v1.10.0
 
 - Make the flasher script respect the global pixel notification offset
