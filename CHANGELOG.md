@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## DPUS v1.10.2
+
+- Remove unused fields that broke the script after pxls auth changes
+
 ## DPUS v1.10.1
 
 - Add a setting that allows you to un-sync the flasher from the global pixel notification offset
