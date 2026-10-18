@@ -1,12 +1,6 @@
 import type { InferOutput } from 'valibot';
 import * as v from 'valibot';
 
-const pxlsInfoAuthServiceSchema = v.object({
-    id: v.string(),
-    name: v.string(),
-    registrationEnabled: v.boolean(),
-});
-
 const pxlsInfoCustomEmojiSchema = v.object({
     emoji: v.string(),
     name: v.string(),
@@ -40,8 +34,6 @@ export const pxlsInfoResponseSchema = v.object({
     cooldownInfo: pxlsInfoCooldownInfoSchema,
     heatmapCooldown: v.number(),
     maxStacked: v.number(),
-    authServices: v.record(v.string(), pxlsInfoAuthServiceSchema),
-    registrationEnabled: v.boolean(),
     chatEnabled: v.boolean(),
     chatRespectsCanvasBan: v.boolean(),
     chatCharacterLimit: v.number(),
@@ -62,7 +54,6 @@ export const pxlsInfoResponseSchema = v.object({
 });
 
 export type PxlsInfoResponse = InferOutput<typeof pxlsInfoResponseSchema>;
-export type PxlsInfoAuthService = InferOutput<typeof pxlsInfoAuthServiceSchema>;
 export type PxlsInfoCustomEmoji = InferOutput<typeof pxlsInfoCustomEmojiSchema>;
 export type PxlsInfoPaletteItem = InferOutput<typeof pxlsInfoPaletteItemSchema>;
 export type PxlsInfoCooldownInfo = InferOutput<typeof pxlsInfoCooldownInfoSchema>;
