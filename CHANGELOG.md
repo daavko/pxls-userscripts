@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## DPUS v1.11.0
+
 - Use a separate socket for pixel updates instead of trying to hijack the pxls socket, due to ViolentMonkey script injection timing issues
 - Fix a bug where placing an incorrect pixel on an already incorrect pixel would wrongly decrement the correct pixel counter in template info
 
