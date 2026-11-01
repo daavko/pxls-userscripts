@@ -12,7 +12,13 @@ import {
     waitForVirginmapLoaded,
 } from '../modules/pxls-ui';
 import { detemplatizeImage, getTemplateImage } from '../modules/template';
-import { bindWebSocketProxy, PIXEL_PLACED_EVENT_NAME, type PlacedPixelData } from '../modules/websocket';
+import {
+    enablePixelSocket,
+    PIXEL_PLACED_EVENT_NAME,
+    PIXEL_SOCKET_CONNECTED_EVENT_NAME,
+    PixelEventReplayer,
+    type PlacedPixelData,
+} from '../modules/websocket';
 import templateInfoStyles from './template-info.user.css';
 import { PxlsUserscript } from './userscript';
 
@@ -33,6 +39,7 @@ export class TemplateInfoScript extends PxlsUserscript {
     private templateCompletedPixels = 0;
     private templateVirginAbusePixelsCollection = new Uint8Array(0);
     private templateVirginAbusePixels = 0;
+    private templateCorrectnessCollection = new Uint8Array(0);
 
     private readonly infoViewElements = {
         totalPixels: el('span', ['0']),
@@ -81,6 +88,36 @@ export class TemplateInfoScript extends PxlsUserscript {
     private initUI(): void {
         const bubble = getPxlsUIMainBubble();
         bubble.appendChild(this.templateInfoElement);
+    }
+
+    private initEventListeners(): void {
+        window.addEventListener(PIXEL_SOCKET_CONNECTED_EVENT_NAME, () => {
+            const template = getCurrentTemplate();
+            if (template) {
+                debug('Template already set, loading');
+                this.templateChanged(template);
+            }
+        });
+
+        window.addEventListener(PIXEL_PLACED_EVENT_NAME, ({ detail: { pixels } }) => {
+            if (!this.detemplatizedTemplate) {
+                return;
+            }
+
+            for (const pixel of pixels) {
+                this.pixelPlaced(pixel);
+            }
+        });
+
+        window.addEventListener(TEMPLATE_CHANGE_EVENT_NAME, ({ detail: template }) => {
+            if (template == null) {
+                if (this.detemplatizedTemplate != null) {
+                    this.clearTemplate();
+                }
+            } else {
+                this.templateChanged(template);
+            }
+        });
     }
 
     private updateUI(): void {
@@ -166,9 +203,9 @@ export class TemplateInfoScript extends PxlsUserscript {
         this.templateTotalPixels = 0;
         this.templateCompletedPixels = 0;
         this.templateVirginAbusePixels = 0;
-        this.templateVirginAbusePixelsCollection = new Uint8Array(
-            detemplatizedTemplate.width * detemplatizedTemplate.height,
-        );
+        const templateSize = detemplatizedTemplate.width * detemplatizedTemplate.height;
+        this.templateVirginAbusePixelsCollection = new Uint8Array(templateSize);
+        this.templateCorrectnessCollection = new Uint8Array(templateSize);
         for (let y = 0; y < detemplatizedTemplate.height; y++) {
             const rowStart = y * detemplatizedTemplate.width;
             for (let x = 0; x < detemplatizedTemplate.width; x++) {
@@ -189,6 +226,7 @@ export class TemplateInfoScript extends PxlsUserscript {
                 if (boardColor === templateColor) {
                     // pixel is placed correctly
                     this.templateCompletedPixels++;
+                    this.templateCorrectnessCollection[pixelIndex] = 1;
 
                     const virginmapColor = virginmapImageDataUint32View[pixelIndex];
                     if (virginmapColor === 0) {
@@ -242,8 +280,11 @@ export class TemplateInfoScript extends PxlsUserscript {
 
         if (pixelColor === placedColor) {
             this.templateCompletedPixels++;
-        } else {
+            this.templateCorrectnessCollection[pixelIndex] = 1;
+        } else if (this.templateCorrectnessCollection[pixelIndex] === 1) {
+            // pixel was correct, isn't correct anymore
             this.templateCompletedPixels--;
+            this.templateCorrectnessCollection[pixelIndex] = 0;
         }
 
         if (this.templateVirginAbusePixelsCollection[pixelIndex] === 1) {
@@ -263,6 +304,8 @@ export class TemplateInfoScript extends PxlsUserscript {
     private templateChanged(template: TemplateData): void {
         const width = template.width;
 
+        const replayer = new PixelEventReplayer();
+
         getTemplateImage()
             .then(async (imageData) => {
                 debug('Template image loaded');
@@ -273,6 +316,10 @@ export class TemplateInfoScript extends PxlsUserscript {
                 this.detemplatizedTemplate = detemplatizedImageData;
                 this.detemplatizedTemplateUint32View = new Uint32Array(detemplatizedImageData.data.buffer);
                 this.collectTemplateInfo();
+
+                for (const pixel of replayer.consume()) {
+                    this.pixelPlaced(pixel);
+                }
             })
             .catch((error: unknown) => {
                 if (error instanceof Error) {
@@ -287,7 +334,6 @@ export class TemplateInfoScript extends PxlsUserscript {
     }
 
     private initBeforeApp(): void {
-        bindWebSocketProxy();
         addStylesheet('dpus__template-info', templateInfoStyles);
     }
 
@@ -311,31 +357,9 @@ export class TemplateInfoScript extends PxlsUserscript {
             throw new Error('Failed to get virginmap canvas context');
         }
 
-        window.addEventListener(PIXEL_PLACED_EVENT_NAME, ({ detail: { pixels } }) => {
-            if (!this.detemplatizedTemplate) {
-                return;
-            }
+        this.initEventListeners();
+        enablePixelSocket();
 
-            for (const pixel of pixels) {
-                this.pixelPlaced(pixel);
-            }
-        });
-
-        window.addEventListener(TEMPLATE_CHANGE_EVENT_NAME, ({ detail: template }) => {
-            if (template == null) {
-                if (this.detemplatizedTemplate != null) {
-                    this.clearTemplate();
-                }
-            } else {
-                this.templateChanged(template);
-            }
-        });
-
-        const template = getCurrentTemplate();
-        if (template) {
-            debug('Template already set, loading');
-            this.templateChanged(template);
-        }
         this.updateUI();
     }
 }

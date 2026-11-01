@@ -4,7 +4,7 @@ import * as v from 'valibot';
 import { debug, debugTime } from '../modules/debug';
 import { addStylesheet } from '../modules/document';
 import { el } from '../modules/html';
-import { createInfoIcon } from '../modules/info-icon';
+import { InfoIcon } from '../modules/info-icon';
 import { Messenger } from '../modules/message';
 import { getFastLookupPalette } from '../modules/pxls-palette';
 import {
@@ -31,7 +31,13 @@ import {
     createSettingsUI,
 } from '../modules/settings-ui';
 import { detemplatizeImage, getTemplateImage } from '../modules/template';
-import { bindWebSocketProxy, PIXEL_PLACED_EVENT_NAME, type PlacedPixelData } from '../modules/websocket';
+import {
+    enablePixelSocket,
+    PIXEL_PLACED_EVENT_NAME,
+    PIXEL_SOCKET_CONNECTED_EVENT_NAME,
+    PixelEventReplayer,
+    type PlacedPixelData,
+} from '../modules/websocket';
 import griefTrackerStyles from './grief-tracker.user.css';
 import { PxlsUserscript } from './userscript';
 
@@ -160,7 +166,7 @@ export class GriefTrackerScript extends PxlsUserscript {
     private lastRenderedHighlightColorIndex = 0;
     private animationFrameRequestId: number | null = null;
 
-    private readonly infoIcon = createInfoIcon('Grief Tracker', mdiMapMarkerAlertOutline, {
+    private readonly infoIcon = new InfoIcon('Grief Tracker', mdiMapMarkerAlertOutline, {
         clickable: true,
         states: [
             { key: 'default', color: 'white', title: 'Idle' },
@@ -172,7 +178,7 @@ export class GriefTrackerScript extends PxlsUserscript {
         ],
     });
 
-    private readonly clearGriefsIcon = createInfoIcon('Grief Tracker', mdiMapMarkerRemoveVariant, {
+    private readonly clearGriefsIcon = new InfoIcon('Grief Tracker', mdiMapMarkerRemoveVariant, {
         clickable: true,
         states: [{ key: 'default', color: 'white', title: 'Clear griefs' }],
     });
@@ -279,6 +285,16 @@ export class GriefTrackerScript extends PxlsUserscript {
                 }
 
                 this.clearGriefList();
+            }
+        });
+
+        window.addEventListener(PIXEL_SOCKET_CONNECTED_EVENT_NAME, () => {
+            const template = getCurrentTemplate();
+            if (template) {
+                debug('Template already set, loading');
+                this.templateChanged(template);
+            } else if (!this.settings.enabled.get()) {
+                this.infoIcon.setState('disabled');
             }
         });
 
@@ -537,6 +553,8 @@ export class GriefTrackerScript extends PxlsUserscript {
         const width = template.width;
         this.infoIcon.setState('loadingTemplate');
 
+        const replayer = new PixelEventReplayer();
+
         getTemplateImage()
             .then(async (imageData) => {
                 debug('Template image loaded');
@@ -564,6 +582,11 @@ export class GriefTrackerScript extends PxlsUserscript {
                 } else {
                     this.infoIcon.setState('disabled');
                 }
+
+                for (const pixel of replayer.consume()) {
+                    this.pixelPlaced(pixel);
+                }
+
                 window.requestAnimationFrame(this.handleAnimationFrame);
             })
             .catch((error: unknown) => {
@@ -607,7 +630,6 @@ export class GriefTrackerScript extends PxlsUserscript {
     };
 
     private initBeforeApp(): void {
-        bindWebSocketProxy();
         addStylesheet('dpus__grief-tracker', griefTrackerStyles);
     }
 
@@ -626,18 +648,12 @@ export class GriefTrackerScript extends PxlsUserscript {
         await Promise.all([waitForBoardLoaded(), waitForVirginmapLoaded(), waitForHeatmapLoaded()]);
         infoIcon.setState('default');
 
-        this.initEventListeners();
         const boardContainer = getPxlsUIBoardContainer();
         boardContainer.appendChild(griefsCanvas);
         griefsCanvas.classList.toggle('dpus__grief-tracker--hidden', !settings.enabled.get());
         griefsCanvas.classList.toggle('dpus__grief-tracker--under-template', settings.renderUnderTemplate.get());
 
-        const template = getCurrentTemplate();
-        if (template) {
-            debug('Template already set, loading');
-            this.templateChanged(template);
-        } else if (!settings.enabled.get()) {
-            infoIcon.setState('disabled');
-        }
+        this.initEventListeners();
+        enablePixelSocket();
     }
 }

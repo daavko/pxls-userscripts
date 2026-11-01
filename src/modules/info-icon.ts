@@ -12,36 +12,35 @@ export interface InfoIconOptions<T extends InfoIconState[]> {
     states: T;
 }
 
-const DEFAULT_INFO_ICON_STATES = [{ key: 'default', color: 'white' }] as const satisfies InfoIconState[];
-const DEFAULT_INFO_ICON_OPTIONS: InfoIconOptions<typeof DEFAULT_INFO_ICON_STATES> = {
-    clickable: false,
-    states: DEFAULT_INFO_ICON_STATES,
-};
-
 export interface InfoIconState<T extends string = string> {
     key: T;
     color: InfoIconColor;
+    pathData?: string;
     title?: string;
 }
 
 export class InfoIcon<const T extends InfoIconState[]> {
+    readonly element: HTMLElement;
+
+    private readonly pathElement: SVGPathElement;
     private readonly states: InfoIconState[];
     private activeState: InfoIconState | null = null;
 
     constructor(
-        readonly element: HTMLElement,
         private readonly title: string,
-        options: Partial<InfoIconOptions<T>> = {},
+        private readonly pathData: string,
+        options: InfoIconOptions<T>,
     ) {
-        const optionsWithDefaults = {
-            ...DEFAULT_INFO_ICON_OPTIONS,
-            ...options,
-        };
-        if (optionsWithDefaults.clickable) {
+        this.pathElement = svgEl('path', { attributes: { d: pathData } });
+        this.element = el('div', { class: 'dpus__info-icon' }, [
+            svgEl('svg', { attributes: { viewBox: '0 0 24 24' } }, [this.pathElement]),
+        ]);
+
+        if (options.clickable) {
             this.element.classList.add('dpus__info-icon--clickable');
         }
 
-        this.states = optionsWithDefaults.states;
+        this.states = options.states;
         if (this.states.length === 0) {
             throw new Error('No states provided');
         }
@@ -72,6 +71,7 @@ export class InfoIcon<const T extends InfoIconState[]> {
         } else {
             this.element.removeAttribute('title');
         }
+        this.pathElement.setAttribute('d', newState.pathData ?? this.pathData);
     }
 
     toggleHidden(hide?: boolean): void {
@@ -81,17 +81,6 @@ export class InfoIcon<const T extends InfoIconState[]> {
     private classNameFromState(state: InfoIconColor): string {
         return `dpus__info-icon--${state}`;
     }
-}
-
-export function createInfoIcon<const T extends InfoIconState[]>(
-    title: string,
-    pathData: string,
-    options?: Partial<InfoIconOptions<T>>,
-): InfoIcon<T> {
-    const svg = el('div', { class: 'dpus__info-icon' }, [
-        svgEl('svg', { attributes: { viewBox: '0 0 24 24' } }, [svgEl('path', { attributes: { d: pathData } })]),
-    ]);
-    return new InfoIcon(svg, title, options);
 }
 
 export function getOrInitInfoIconsContainer(): Element {

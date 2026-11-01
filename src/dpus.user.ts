@@ -1,6 +1,6 @@
 import { debug } from './modules/debug';
 import { addStylesheet, removeStylesheet } from './modules/document';
-import { Messenger } from './modules/message';
+import { GLOBAL_MESSENGER } from './modules/message';
 import { waitForApp } from './modules/pxls-init';
 import { initTemplateEventHandlers } from './modules/pxls-template';
 import { findUIElements } from './modules/pxls-ui';
@@ -23,8 +23,6 @@ import { TemplateRefresher } from './scripts/template-refresher';
 import type { PxlsUserscript } from './scripts/userscript';
 import bubbleUnstupidifierStyles from './styles/bubble-unstupidifier.css';
 import noMoveTemplateHereStyles from './styles/no-move-template-here.css';
-
-const messenger = new Messenger('DPUS');
 
 const settings = Settings.create('global', {
     templateInfoEnabled: new BooleanSetting(false),
@@ -97,7 +95,7 @@ function handleStyleSettingChange(styleName: keyof typeof GLOBAL_STYLES, enabled
 
 async function init(): Promise<void> {
     if (window.App) {
-        messenger.showErrorMessage('Pxls is already initialized, DPUS cannot initialize at this point.');
+        GLOBAL_MESSENGER.showErrorMessage('Pxls is already initialized, DPUS cannot initialize at this point.');
     }
 
     const scripts: PxlsUserscript[] = [];
@@ -142,9 +140,9 @@ async function init(): Promise<void> {
                 script.beforeApp();
             } catch (e: unknown) {
                 if (e instanceof Error) {
-                    messenger.showErrorMessage(`Error in beforeApp of script "${script.name}": ${e.message}`, e);
+                    GLOBAL_MESSENGER.showErrorMessage(`Error in beforeApp of script "${script.name}": ${e.message}`, e);
                 } else {
-                    messenger.showErrorMessage(
+                    GLOBAL_MESSENGER.showErrorMessage(
                         `Error in beforeApp of script "${script.name}"`,
                         new Error(String(e), { cause: e }),
                     );
@@ -161,7 +159,9 @@ async function init(): Promise<void> {
     const app = await waitForApp();
 
     if (Reflect.has(window, 'dpus')) {
-        messenger.showErrorMessage('Found old scripts, please remove them before using the unified Utility Scripts.');
+        GLOBAL_MESSENGER.showErrorMessage(
+            'Found old scripts, please remove them before using the unified Utility Scripts.',
+        );
         return;
     }
 
@@ -190,9 +190,9 @@ async function init(): Promise<void> {
                 await Promise.try(script.afterApp, app);
             } catch (e: unknown) {
                 if (e instanceof Error) {
-                    messenger.showErrorMessage(`Error in afterApp of script "${script.name}": ${e.message}`, e);
+                    GLOBAL_MESSENGER.showErrorMessage(`Error in afterApp of script "${script.name}": ${e.message}`, e);
                 } else {
-                    messenger.showErrorMessage(
+                    GLOBAL_MESSENGER.showErrorMessage(
                         `Error in afterApp of script "${script.name}"`,
                         new Error(String(e), { cause: e }),
                     );
@@ -208,7 +208,7 @@ async function init(): Promise<void> {
     }
 
     if (!dpusHasBeenLaunchedBefore()) {
-        messenger.showInfoMessage(
+        GLOBAL_MESSENGER.showInfoMessage(
             'Please check the bottom of Pxls settings to enable or disable available scripts',
             10_000,
         );
@@ -219,8 +219,11 @@ async function init(): Promise<void> {
 
 init().catch((e: unknown) => {
     if (e instanceof Error) {
-        messenger.showErrorMessage(`Error during initialization: ${e.message}`, e);
+        GLOBAL_MESSENGER.showErrorMessage(`Error during initialization: ${e.message}`, e);
     } else {
-        messenger.showErrorMessage('Unknown error during initialization', new Error('Unknown error', { cause: e }));
+        GLOBAL_MESSENGER.showErrorMessage(
+            'Unknown error during initialization',
+            new Error('Unknown error', { cause: e }),
+        );
     }
 });

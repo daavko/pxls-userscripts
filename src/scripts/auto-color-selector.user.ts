@@ -1,7 +1,7 @@
 import { mdiEyedropper } from '@mdi/js';
 import { Random } from 'random';
 import { debug } from '../modules/debug';
-import { createInfoIcon } from '../modules/info-icon';
+import { InfoIcon } from '../modules/info-icon';
 import { Messenger } from '../modules/message';
 import { getApp } from '../modules/pxls-init';
 import { anyColorSelected, getFastLookupPalette, selectColor, unselectColor } from '../modules/pxls-palette';
@@ -55,7 +55,7 @@ export class AutoColorSelectorScript extends PxlsUserscript {
         this.processCoords();
     });
 
-    private readonly infoIcon = createInfoIcon('Template color autoselector', mdiEyedropper, {
+    private readonly infoIcon = new InfoIcon('Template color autoselector', mdiEyedropper, {
         clickable: true,
         states: [
             { key: 'default', color: 'white', title: 'Idle' },
