@@ -1,7 +1,7 @@
 import { mdiWifiStrength4, mdiWifiStrengthOff, mdiWifiStrengthOutline } from '@mdi/js';
 import type { InferOutput } from 'valibot';
 import * as v from 'valibot';
-import { debug } from './debug';
+import { debug, debugEnabled } from './debug';
 import { InfoIcon } from './info-icon';
 import { GLOBAL_MESSENGER } from './message';
 import { waitForBoardLoaded } from './pxls-ui';
@@ -60,7 +60,9 @@ export function enablePixelSocket(): void {
 
 async function createSocketPromise(): Promise<void> {
     await waitForBoardLoaded();
-    connectionInfoIcon.addToIconsContainer();
+    if (debugEnabled()) {
+        connectionInfoIcon.addToIconsContainer();
+    }
     connect();
 }
 
