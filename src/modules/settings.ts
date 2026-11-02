@@ -147,8 +147,9 @@ export class Settings<const TSettings extends Record<string, Setting<unknown, un
     static create<const TSettings extends Record<string, Setting<unknown, unknown>>>(
         storageKey: string,
         settings: TSettings & {
-            [K in keyof Settings<TSettings> &
-                keyof TSettings]: `Property with name "${K}" already exists on type Settings, can't use as a setting key`;
+            [
+                K in keyof Settings<TSettings> & keyof TSettings
+            ]: `Property with name "${K}" already exists on type Settings, can't use as a setting key`;
         },
     ): SettingsWithSettingKeys<Settings<TSettings>, TSettings> {
         const settingsObject = new Settings(`dpus_settings_${storageKey}`, settings);
