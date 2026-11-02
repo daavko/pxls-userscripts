@@ -31,7 +31,6 @@ const SOCKET_DEFAULT_DELAY_MS = 1000;
 
 let lastDelayMs = SOCKET_DEFAULT_DELAY_MS;
 let currentOpenSocket: WebSocket | null = null;
-let sentInitialCanvasState = false;
 let pixelSocketPromise: Promise<void> | null = null;
 
 const placedPixelSchema = v.object({
@@ -80,12 +79,6 @@ function connect(): void {
     socket.addEventListener('message', (event) => {
         const pixelPlacedData = v.safeParse(pixelPlacedMessageSchema, event.data);
         if (pixelPlacedData.success) {
-            if (!sentInitialCanvasState) {
-                window.dispatchEvent(new CustomEvent(PIXEL_SOCKET_CONNECTED_EVENT_NAME));
-
-                sentInitialCanvasState = true;
-            }
-
             window.dispatchEvent(
                 new CustomEvent(PIXEL_PLACED_EVENT_NAME, {
                     detail: pixelPlacedData.output,
@@ -96,12 +89,12 @@ function connect(): void {
     socket.addEventListener('open', () => {
         connectionInfoIcon.setState('connected');
         lastDelayMs = SOCKET_DEFAULT_DELAY_MS;
+        window.dispatchEvent(new CustomEvent(PIXEL_SOCKET_CONNECTED_EVENT_NAME));
     });
     socket.addEventListener('close', (event) => {
         debug(`Websocket closed (code: ${event.code}, clean: ${event.wasClean}, reason: ${event.reason}`);
         lastDelayMs = Math.min(lastDelayMs * 2, SOCKET_MAX_DELAY_MS);
         connectionInfoIcon.setState('connecting');
-        sentInitialCanvasState = false;
         setTimeout(() => {
             connect();
         }, lastDelayMs);
