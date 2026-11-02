@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## DPUS v1.11.1
+
 - Move run-at to document-end since this script no longer needs to run before pxls code runs
 
 ## DPUS v1.11.0
