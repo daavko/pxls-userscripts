@@ -94,10 +94,6 @@ function handleStyleSettingChange(styleName: keyof typeof GLOBAL_STYLES, enabled
 }
 
 async function init(): Promise<void> {
-    if (window.App) {
-        GLOBAL_MESSENGER.showErrorMessage('Pxls is already initialized, DPUS cannot initialize at this point.');
-    }
-
     const scripts: PxlsUserscript[] = [];
     if (settings.templateInfoEnabled.get()) {
         scripts.push(new TemplateInfoScript());

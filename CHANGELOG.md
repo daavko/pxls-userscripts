@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Move run-at to document-end since this script no longer needs to run before pxls code runs
+
 ## DPUS v1.11.0
 
 - Use a separate socket for pixel updates instead of trying to hijack the pxls socket, due to ViolentMonkey script injection timing issues
