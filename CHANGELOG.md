@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## DPUS v1.11.2
+
 - show connection info icon only in debug mode
 - send internal socket init event on socket open, not on first message
 - add setting to move info icons up
