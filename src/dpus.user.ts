@@ -1,5 +1,6 @@
 import { debug } from './modules/debug';
 import { addStylesheet, removeStylesheet } from './modules/document';
+import { toggleInfoIconsContainerMoveUpClass } from './modules/info-icon';
 import { GLOBAL_MESSENGER } from './modules/message';
 import { waitForApp } from './modules/pxls-init';
 import { initTemplateEventHandlers } from './modules/pxls-template';
@@ -22,6 +23,7 @@ import { TemplateInfoScript } from './scripts/template-info.user';
 import { TemplateRefresher } from './scripts/template-refresher';
 import type { PxlsUserscript } from './scripts/userscript';
 import bubbleUnstupidifierStyles from './styles/bubble-unstupidifier.css';
+import moveIconsUpStyles from './styles/move-icons-up.css';
 import noMoveTemplateHereStyles from './styles/no-move-template-here.css';
 
 const settings = Settings.create('global', {
@@ -39,11 +41,18 @@ const settings = Settings.create('global', {
     noMoveTemplateHereStyleEnabled: new BooleanSetting(false, [
         createStyleSettingChangeHandler('dpus__global__no-move-template-here'),
     ]),
+    moveIconsUpStyleEnabled: new BooleanSetting(false, [
+        createStyleSettingChangeHandler('dpus__global__move-icons-up'),
+        (_, newValue): void => {
+            toggleInfoIconsContainerMoveUpClass(newValue);
+        },
+    ]),
 });
 
 const GLOBAL_STYLES = {
     'dpus__global__bubble-unstupidifier': bubbleUnstupidifierStyles,
     'dpus__global__no-move-template-here': noMoveTemplateHereStyles,
+    'dpus__global__move-icons-up': moveIconsUpStyles,
 } as const;
 
 function initSettings(): void {
@@ -65,6 +74,7 @@ function initSettings(): void {
         createSettingsText('Those are just styles I prefer. Reload is not required for changes to take effect.'),
         createBooleanSetting(settings.bubbleUnstupidifierStyleEnabled, 'Info bubble improvements'),
         createBooleanSetting(settings.noMoveTemplateHereStyleEnabled, 'Remove "Move Template Here" button'),
+        createBooleanSetting(settings.moveIconsUpStyleEnabled, 'Move info icons up'),
         createSettingsResetButton(settings),
     ]);
 }
@@ -127,6 +137,10 @@ async function init(): Promise<void> {
     }
     if (settings.noMoveTemplateHereStyleEnabled.get()) {
         styles.push('dpus__global__no-move-template-here');
+    }
+    if (settings.moveIconsUpStyleEnabled.get()) {
+        styles.push('dpus__global__move-icons-up');
+        toggleInfoIconsContainerMoveUpClass(true);
     }
 
     const failedScripts = new Set<string>();

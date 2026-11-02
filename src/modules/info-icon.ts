@@ -4,6 +4,7 @@ import infoIconStyle from './info-icon.css';
 import { getPxlsUITopUI } from './pxls-ui';
 
 let INFO_ICONS_CONTAINER: Element | null = null;
+let movedUp = false;
 
 export type InfoIconColor = 'white' | 'gray' | 'green' | 'red' | 'orange' | 'yellow';
 
@@ -88,10 +89,21 @@ export function getOrInitInfoIconsContainer(): Element {
     return INFO_ICONS_CONTAINER;
 }
 
+export function toggleInfoIconsContainerMoveUpClass(value: boolean): void {
+    if (INFO_ICONS_CONTAINER == null) {
+        movedUp = value;
+    } else {
+        INFO_ICONS_CONTAINER.classList.toggle('dpus__info-icons--move-up', value);
+    }
+}
+
 function createInfoIconContainer(): Element {
     addStylesheet('dpus__info-icons', infoIconStyle);
 
     const infoIconsContainer = el('div', { class: 'dpus__info-icons' });
+    if (movedUp) {
+        infoIconsContainer.classList.add('dpus__info-icons--move-up');
+    }
     getPxlsUITopUI().appendChild(infoIconsContainer);
 
     return infoIconsContainer;
