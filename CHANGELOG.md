@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## DPUS v1.11.3
+
 - fix websocket reconnection did not work
 
 ## DPUS v1.11.2
