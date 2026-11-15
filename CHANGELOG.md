@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- fix websocket reconnection did not work
+
 ## DPUS v1.11.2
 
 - show connection info icon only in debug mode

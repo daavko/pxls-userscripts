@@ -92,8 +92,9 @@ function connect(): void {
         window.dispatchEvent(new CustomEvent(PIXEL_SOCKET_CONNECTED_EVENT_NAME));
     });
     socket.addEventListener('close', (event) => {
-        debug(`Websocket closed (code: ${event.code}, clean: ${event.wasClean}, reason: ${event.reason}`);
+        debug(`Websocket closed (code: ${event.code}, clean: ${event.wasClean}, reason: ${event.reason})`);
         lastDelayMs = Math.min(lastDelayMs * 2, SOCKET_MAX_DELAY_MS);
+        currentOpenSocket = null;
         connectionInfoIcon.setState('connecting');
         setTimeout(() => {
             connect();
