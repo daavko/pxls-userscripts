@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- adapt grief tracker rendering to new pxls frontend
+
 ## DPUS v1.11.3
 
 - fix websocket reconnection did not work

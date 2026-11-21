@@ -233,3 +233,12 @@ export async function waitForHeatmapLoaded(): Promise<HTMLCanvasElement> {
     HEATMAP_LOAD_PROMISE ??= waitForCanvasLoaded(getPxlsUIHeatmapBoard());
     return HEATMAP_LOAD_PROMISE;
 }
+
+const SIZE_REGEX = /(\d+\.?\d*)px/;
+
+export function resolveBoardScale(): number {
+    const board = getPxlsUIBoard();
+    const width = board.width;
+    const styleWidth = SIZE_REGEX.exec(board.style.width)?.at(1) ?? '1';
+    return Number(styleWidth) / width;
+}

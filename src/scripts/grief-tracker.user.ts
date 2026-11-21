@@ -18,6 +18,7 @@ import {
     getPxlsUIBoardContainer,
     getPxlsUIHeatmapBoard,
     getPxlsUIVirginmapBoard,
+    resolveBoardScale,
     waitForBoardLoaded,
     waitForHeatmapLoaded,
     waitForVirginmapLoaded,
@@ -341,6 +342,22 @@ export class GriefTrackerScript extends PxlsUserscript {
         this.griefsCanvas.height = height * pixelSize;
     }
 
+    private updateGriefsCanvasScale(): void {
+        if (this.templateContext == null) {
+            return;
+        }
+
+        const scale = resolveBoardScale();
+        const pixelSize = this.griefPixelSize;
+        const { x, y } = this.templateContext.template;
+        const { width, height } = this.griefsCanvas;
+
+        this.griefsCanvas.style.left = `${x * scale}px`;
+        this.griefsCanvas.style.top = `${y * scale}px`;
+        this.griefsCanvas.style.width = `${(width / pixelSize) * scale}px`;
+        this.griefsCanvas.style.height = `${(height / pixelSize) * scale}px`;
+    }
+
     private coordToMapKey(x: number, y: number): string {
         return `${x},${y}`;
     }
@@ -494,6 +511,7 @@ export class GriefTrackerScript extends PxlsUserscript {
         debugTimer?.stop();
         this.clearGriefList();
         this.updateGriefsCanvasSize(templateWidth, templateHeight);
+        this.updateGriefsCanvasScale();
         this.addGriefs(griefs);
     }
 
@@ -568,14 +586,11 @@ export class GriefTrackerScript extends PxlsUserscript {
                     detemplatizedImageUint32View: new Uint32Array(detemplatizedImageData.data.buffer),
                 };
                 this.clearGriefList();
-                this.griefsCanvas.style.left = `${template.x}px`;
-                this.griefsCanvas.style.top = `${template.y}px`;
-                this.griefsCanvas.style.width = `${detemplatizedImageData.width}px`;
-                this.griefsCanvas.style.height = `${detemplatizedImageData.height}px`;
                 if (this.settings.detectionMode.get() !== 'newOnly') {
                     this.collectExistingGriefs();
                 } else {
                     this.updateGriefsCanvasSize(detemplatizedImageData.width, detemplatizedImageData.height);
+                    this.updateGriefsCanvasScale();
                 }
                 if (this.settings.enabled.get()) {
                     this.infoIcon.setState('templateActive');
@@ -652,6 +667,12 @@ export class GriefTrackerScript extends PxlsUserscript {
         boardContainer.appendChild(griefsCanvas);
         griefsCanvas.classList.toggle('dpus__grief-tracker--hidden', !settings.enabled.get());
         griefsCanvas.classList.toggle('dpus__grief-tracker--under-template', settings.renderUnderTemplate.get());
+
+        const observer = new MutationObserver(() => {
+            this.updateGriefsCanvasScale();
+        });
+        observer.observe(getPxlsUIBoard(), { attributes: true, attributeFilter: ['style'] });
+        this.updateGriefsCanvasScale();
 
         this.initEventListeners();
         enablePixelSocket();
